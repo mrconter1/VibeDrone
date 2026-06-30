@@ -15,6 +15,7 @@ public partial class DroneController : Node3D
     [Export] public int Substeps = 4;
 
     private readonly FlightModel _fm = new();
+    private Node3D _drone;   // the moving node (root stays static so the world doesn't move with it)
     private Camera3D _cam;
     private Label _hud;
     private float _kThrottle; // keyboard throttle fallback
@@ -25,10 +26,13 @@ public partial class DroneController : Node3D
         // start maximised/fullscreen
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
 
-        BuildWorld();
+        BuildWorld();  // static world stays on the root (this), so it does NOT move
 
+        // moving drone node carries the FPV camera
+        _drone = new Node3D();
+        AddChild(_drone);
         _cam = new Camera3D { Fov = 100f };
-        AddChild(_cam);
+        _drone.AddChild(_cam);
         // Godot camera looks -Z; drone forward is +Z -> yaw 180, then uptilt about X.
         _cam.RotationDegrees = new Vector3(CameraTiltDeg, 180f, 0f);
 
@@ -93,9 +97,9 @@ public partial class DroneController : Node3D
     private void ApplyState()
     {
         var p = _fm.Pos;
-        GlobalPosition = new Vector3(p.X, p.Y, p.Z);
+        _drone.GlobalPosition = new Vector3(p.X, p.Y, p.Z);
         var q = _fm.Rot;
-        Quaternion = new Quaternion(q.X, q.Y, q.Z, q.W);
+        _drone.Quaternion = new Quaternion(q.X, q.Y, q.Z, q.W);
 
         if (_hud != null)
         {
