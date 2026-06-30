@@ -9,7 +9,7 @@ namespace OpenDrone
     public sealed class FlightModel
     {
         // --- fitted parameters (from the validated long flight) ---
-        public float G = 9.81f;
+        public float G = 11.997f;            // the reference sim is ~12 m/s^2, NOT Earth's 9.81 (fitted)
 
         // rate curve per axis: omega = lin*s + cubic*s^3 + bias, s = stick in [-1,1]
         public Vector3 RollRate  = new(-2.8414f, -8.6136f, -0.0008f);   // (lin, cubic, bias)
@@ -18,10 +18,10 @@ namespace OpenDrone
         // which body-rate axis each stick drives (x=0,y=1,z=2)
         public int RollAxis = 2, PitchAxis = 0, YawAxis = 1;
 
-        public float ThrustK = 20.9055f;     // accel per unit (4*throttle^2)
-        public float DragUp = 2.1455f;       // vertical body drag
-        public float DragLatKd = -0.1032f;   // lateral linear drag
-        public float DragLatKq = 0.02747f;   // lateral quadratic drag
+        public float ThrustK = 21.14f;       // accel per unit (4*throttle^2)
+        public float DragUp = 2.155f;        // vertical body drag
+        public float DragLatKd = -0.023f;    // lateral linear drag
+        public float DragLatKq = 0.0257f;    // lateral quadratic drag
         public float Tau = 0.005f;           // motor spool-up time constant (s)
 
         // --- state ---
