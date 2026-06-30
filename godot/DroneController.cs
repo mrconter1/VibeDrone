@@ -13,10 +13,10 @@ public partial class DroneController : Node3D
 {
     [Export] public int JoyDevice = 0;
     [Export] public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
-    [Export] public float SignRoll = 1f, SignPitch = 1f, SignYaw = 1f, SignThrottle = 1f;
+    [Export] public float SignRoll = -1f, SignPitch = -1f, SignYaw = 1f, SignThrottle = 1f;
     [Export] public float CameraTiltDeg = 25f;
     [Export] public int Substeps = 4;
-    [Export] public bool Replay = true;                  // start in replay (ground truth); Tab to fly live
+    [Export] public bool Replay = false;                 // start live; Tab to watch recorded replay
     [Export] public string ReplayFile = "res://replay.csv";
 
     private readonly FlightModel _fm = new();
