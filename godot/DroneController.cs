@@ -16,10 +16,15 @@ public partial class DroneController : Node3D
 
     private readonly FlightModel _fm = new();
     private Camera3D _cam;
+    private Label _hud;
     private float _kThrottle; // keyboard throttle fallback
+    private readonly float[] _axes = new float[16]; // raw joypad axes by index
 
     public override void _Ready()
     {
+        // start maximised/fullscreen
+        DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+
         BuildWorld();
 
         _cam = new Camera3D { Fov = 100f };
@@ -27,19 +32,34 @@ public partial class DroneController : Node3D
         // Godot camera looks -Z; drone forward is +Z -> yaw 180, then uptilt about X.
         _cam.RotationDegrees = new Vector3(CameraTiltDeg, 180f, 0f);
 
+        // on-screen HUD (also shows raw axes so you can calibrate)
+        var layer = new CanvasLayer();
+        AddChild(layer);
+        _hud = new Label { Position = new Vector2(14, 12) };
+        layer.AddChild(_hud);
+
         Input.MouseMode = Input.MouseModeEnum.Hidden;
         ApplyState();
     }
+
+    // Raw joypad axes work even for non-gamepad radios (no SDL mapping needed).
+    public override void _Input(InputEvent ev)
+    {
+        if (ev is InputEventJoypadMotion m && (int)m.Axis < _axes.Length)
+            _axes[(int)m.Axis] = m.AxisValue;
+    }
+
+    private static float Dead(float v, float dz = 0.04f) => Mathf.Abs(v) < dz ? 0f : v;
 
     public override void _PhysicsProcess(double delta)
     {
         float roll, pitch, yaw, throttle;
         if (Input.GetConnectedJoypads().Count > 0)
         {
-            roll = Input.GetJoyAxis(JoyDevice, (JoyAxis)AxisRoll);
-            pitch = Input.GetJoyAxis(JoyDevice, (JoyAxis)AxisPitch);
-            yaw = Input.GetJoyAxis(JoyDevice, (JoyAxis)AxisYaw);
-            throttle = (Input.GetJoyAxis(JoyDevice, (JoyAxis)AxisThrottle) + 1f) * 0.5f;
+            roll = Dead(_axes[AxisRoll]);
+            pitch = Dead(_axes[AxisPitch]);
+            yaw = Dead(_axes[AxisYaw]);
+            throttle = (_axes[AxisThrottle] + 1f) * 0.5f;
         }
         else
         {
@@ -76,6 +96,18 @@ public partial class DroneController : Node3D
         GlobalPosition = new Vector3(p.X, p.Y, p.Z);
         var q = _fm.Rot;
         Quaternion = new Quaternion(q.X, q.Y, q.Z, q.W);
+
+        if (_hud != null)
+        {
+            int pads = Input.GetConnectedJoypads().Count;
+            string name = pads > 0 ? Input.GetJoyName(JoyDevice) : "none";
+            _hud.Text =
+                $"alt {p.Y,6:0.0} m   speed {_fm.Vel.Length(),6:0.0} m/s\n" +
+                $"joypad: {name}  ({pads} connected)\n" +
+                $"raw axes: 0={_axes[0]:+0.00;-0.00} 1={_axes[1]:+0.00;-0.00} " +
+                $"2={_axes[2]:+0.00;-0.00} 3={_axes[3]:+0.00;-0.00} 4={_axes[4]:+0.00;-0.00}\n" +
+                "Esc quit   R reset";
+        }
     }
 
     private void BuildWorld()
