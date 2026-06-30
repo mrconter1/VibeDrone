@@ -40,7 +40,11 @@ namespace OpenDrone
             Thrust = G;
         }
 
-        private static float Curve(Vector3 c, float s) => c.X * s + c.Y * s * s * s + c.Z;
+        // rate curve: omega = lin*s + cubic*s^3 + bias (s = stick in [-1,1]). Public so the
+        // Godot controller can integrate orientation natively (right-handed) instead of
+        // copying this model's left-handed quaternion.
+        public static float RateCurve(Vector3 c, float s) => c.X * s + c.Y * s * s * s + c.Z;
+        private static float Curve(Vector3 c, float s) => RateCurve(c, s);
 
         private Vector3 BodyRates(float roll, float pitch, float yaw)
         {

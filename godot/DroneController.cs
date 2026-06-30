@@ -21,6 +21,10 @@ public partial class DroneController : Node3D
     private float _kThrottle; // keyboard throttle fallback
     private readonly float[] _axes = new float[16]; // raw joypad axes by index
 
+    // integrated natively in Godot's right-handed frame (orientation lives on _drone)
+    private Vector3 _vel = Vector3.Zero;
+    private float _thrust;
+
     public override void _Ready()
     {
         // start maximised/fullscreen
@@ -43,7 +47,7 @@ public partial class DroneController : Node3D
         layer.AddChild(_hud);
 
         Input.MouseMode = Input.MouseModeEnum.Hidden;
-        ApplyState();
+        ResetDrone();
     }
 
     // Raw joypad axes work even for non-gamepad radios (no SDL mapping needed).
@@ -75,14 +79,47 @@ public partial class DroneController : Node3D
             throttle = _kThrottle;
         }
 
-        roll *= SignRoll; pitch *= SignPitch; yaw *= SignYaw;
         if (SignThrottle < 0) throttle = 1f - throttle;
 
         float dt = (float)delta / Substeps;
         for (int i = 0; i < Substeps; i++)
-            _fm.Step(roll, pitch, yaw, throttle, dt);
+            Integrate(roll, pitch, yaw, throttle, dt);
 
         ApplyState();
+    }
+
+    // Integrate orientation + translation natively in Godot's frame (no LH->RH quaternion
+    // copy, so combined rotations compose correctly). Uses the fitted FlightModel params.
+    private void Integrate(float roll, float pitch, float yaw, float throttle, float dt)
+    {
+        float wr = FlightModel.RateCurve(_fm.RollRate, roll) * SignRoll;   // about local forward (Z)
+        float wp = FlightModel.RateCurve(_fm.PitchRate, pitch) * SignPitch; // about local right (X)
+        float wy = FlightModel.RateCurve(_fm.YawRate, yaw) * SignYaw;      // about local up (Y)
+        _drone.RotateObjectLocal(new Vector3(0, 0, 1), wr * dt);
+        _drone.RotateObjectLocal(new Vector3(1, 0, 0), wp * dt);
+        _drone.RotateObjectLocal(new Vector3(0, 1, 0), wy * dt);
+
+        Basis b = _drone.GlobalTransform.Basis;
+        float target = _fm.ThrustK * 4f * throttle * throttle;
+        _thrust += (target - _thrust) * Mathf.Min(dt / Mathf.Max(_fm.Tau, 1e-4f), 1f);
+
+        float spd = _vel.Length();
+        Vector3 vb = b.Inverse() * _vel;                 // world -> body
+        float lat = _fm.DragLatKd + _fm.DragLatKq * spd;
+        var aBody = new Vector3(-lat * vb.X, _thrust - _fm.DragUp * vb.Y, -lat * vb.Z);
+        Vector3 a = b * aBody + new Vector3(0f, -_fm.G, 0f);
+
+        _vel += a * dt;
+        Vector3 p = _drone.GlobalPosition + _vel * dt;
+        if (p.Y < 0f) { p.Y = 0f; if (_vel.Y < 0f) _vel.Y = 0f; }
+        _drone.GlobalPosition = p;
+    }
+
+    private void ResetDrone()
+    {
+        _drone.Transform = new Transform3D(Basis.Identity, new Vector3(0, 2, 0));
+        _vel = Vector3.Zero;
+        _thrust = _fm.G;
     }
 
     public override void _UnhandledInput(InputEvent ev)
@@ -90,28 +127,21 @@ public partial class DroneController : Node3D
         if (ev is InputEventKey { Pressed: true } k)
         {
             if (k.Keycode == Key.Escape) GetTree().Quit();
-            else if (k.Keycode == Key.R) _fm.Reset();
+            else if (k.Keycode == Key.R) ResetDrone();
         }
     }
 
     private void ApplyState()
     {
-        var p = _fm.Pos;
-        _drone.GlobalPosition = new Vector3(p.X, p.Y, p.Z);
-        var q = _fm.Rot;
-        _drone.Quaternion = new Quaternion(q.X, q.Y, q.Z, q.W);
-
-        if (_hud != null)
-        {
-            int pads = Input.GetConnectedJoypads().Count;
-            string name = pads > 0 ? Input.GetJoyName(JoyDevice) : "none";
-            _hud.Text =
-                $"alt {p.Y,6:0.0} m   speed {_fm.Vel.Length(),6:0.0} m/s\n" +
-                $"joypad: {name}  ({pads} connected)\n" +
-                $"raw axes: 0={_axes[0]:+0.00;-0.00} 1={_axes[1]:+0.00;-0.00} " +
-                $"2={_axes[2]:+0.00;-0.00} 3={_axes[3]:+0.00;-0.00} 4={_axes[4]:+0.00;-0.00}\n" +
-                "Esc quit   R reset";
-        }
+        if (_hud == null) return;
+        int pads = Input.GetConnectedJoypads().Count;
+        string name = pads > 0 ? Input.GetJoyName(JoyDevice) : "none";
+        _hud.Text =
+            $"alt {_drone.GlobalPosition.Y,6:0.0} m   speed {_vel.Length(),6:0.0} m/s\n" +
+            $"joypad: {name}  ({pads} connected)\n" +
+            $"raw axes: 0={_axes[0]:+0.00;-0.00} 1={_axes[1]:+0.00;-0.00} " +
+            $"2={_axes[2]:+0.00;-0.00} 3={_axes[3]:+0.00;-0.00} 4={_axes[4]:+0.00;-0.00}\n" +
+            "Esc quit   R reset";
     }
 
     private void BuildWorld()
