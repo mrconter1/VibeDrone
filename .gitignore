@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# captured data
+logs/
+*.csv
+
+# .NET / the tooling build
+mod/bin/
+mod/obj/
+*.user
