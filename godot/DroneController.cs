@@ -10,7 +10,7 @@ public partial class DroneController : Node3D
     [Export] public int JoyDevice = 0;
     [Export] public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
     // per-channel sign (match your radio + the fitted convention)
-    [Export] public float SignRoll = 1f, SignPitch = -1f, SignYaw = -1f, SignThrottle = 1f;
+    [Export] public float SignRoll = 1f, SignPitch = 1f, SignYaw = 1f, SignThrottle = 1f;
     [Export] public float CameraTiltDeg = 25f;
     [Export] public int Substeps = 4;
 
