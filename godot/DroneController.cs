@@ -22,8 +22,10 @@ public partial class DroneController : Node3D
     private readonly FlightModel _fm = new();
     private Node3D _drone;
     private Camera3D _cam;
-    private Label _hud;
+    private Hud _osd;
     private float _kThrottle;
+    private float _flightTime;
+    private float _curThrottle;
     private readonly float[] _axes = new float[16];
 
     // replay data
@@ -45,8 +47,8 @@ public partial class DroneController : Node3D
 
         var layer = new CanvasLayer();
         AddChild(layer);
-        _hud = new Label { Position = new Vector2(14, 12) };
-        layer.AddChild(_hud);
+        _osd = new Hud();
+        layer.AddChild(_osd);
 
         if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Hidden;
@@ -98,7 +100,14 @@ public partial class DroneController : Node3D
             _fm.Step(roll, pitch, yaw, throttle, dt);
 
         ApplyTransform(_fm.Pos, _fm.Rot);
-        ApplyHud("LIVE (Tab=replay)");
+        _curThrottle = throttle;
+        _flightTime += (float)delta;
+
+        // speed-scaled FOV for the FPV "rush"
+        float spd = _fm.Vel.Length();
+        _cam.Fov = Mathf.Lerp(_cam.Fov, 95f + Mathf.Min(spd, 40f) * 0.9f, 0.1f);
+
+        ApplyHud("LIVE");
     }
 
     // --- the single verified Unity(LH, Y up, +Z fwd) -> Godot(RH, Y up, -Z fwd) conversion ---
@@ -124,6 +133,7 @@ public partial class DroneController : Node3D
     {
         _fm.Reset();
         _replayT = 0f;
+        _flightTime = 0f;
         if (Replay && _rt.Count > 0) ApplyTransform(_rpos[0], _rquat[0]);
         else ApplyTransform(_fm.Pos, _fm.Rot);
     }
@@ -162,45 +172,110 @@ public partial class DroneController : Node3D
 
     private void ApplyHud(string mode)
     {
-        if (_hud == null) return;
-        int pads = Input.GetConnectedJoypads().Count;
-        string name = pads > 0 ? Input.GetJoyName(JoyDevice) : "none";
-        _hud.Text =
-            $"[{mode}]   alt {_drone.GlobalPosition.Y,6:0.0} m   speed {_fm.Vel.Length(),6:0.0} m/s\n" +
-            $"joypad: {name}  ({pads})\n" +
-            $"raw axes: 0={_axes[0]:+0.00;-0.00} 1={_axes[1]:+0.00;-0.00} 2={_axes[2]:+0.00;-0.00} 3={_axes[3]:+0.00;-0.00}\n" +
-            "Esc quit   R reset   Tab live/replay";
+        if (_osd == null) return;
+        Basis b = _drone.GlobalTransform.Basis;
+        _osd.Mode = mode;
+        _osd.Speed = _fm.Vel.Length();
+        _osd.Alt = _drone.GlobalPosition.Y;
+        _osd.Throttle = _curThrottle;
+        _osd.TimeSec = _flightTime;
+        _osd.Fov = _cam.Fov;
+        // climb angle (pitch) and roll from the drone basis, for the artificial horizon
+        _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
+        _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));
     }
 
     private void BuildWorld()
     {
-        var sun = new DirectionalLight3D { RotationDegrees = new Vector3(-55, -40, 0) };
+        // sun with shadows
+        var sun = new DirectionalLight3D
+        {
+            RotationDegrees = new Vector3(-50, -50, 0),
+            ShadowEnabled = true,
+            LightEnergy = 1.1f,
+        };
         AddChild(sun);
+
+        // procedural sky -> real horizon + sky-based ambient
+        var sky = new Sky { SkyMaterial = new ProceduralSkyMaterial
+        {
+            SkyTopColor = new Color(0.30f, 0.55f, 0.90f),
+            SkyHorizonColor = new Color(0.70f, 0.80f, 0.92f),
+            GroundHorizonColor = new Color(0.70f, 0.80f, 0.92f),
+            GroundBottomColor = new Color(0.20f, 0.23f, 0.28f),
+            SunAngleMax = 30f,
+        } };
         var env = new WorldEnvironment();
         env.Environment = new Godot.Environment
         {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = new Color(0.09f, 0.11f, 0.16f),
-            AmbientLightColor = new Color(0.4f, 0.45f, 0.55f),
-            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            BackgroundMode = Godot.Environment.BGMode.Sky,
+            Sky = sky,
+            AmbientLightSource = Godot.Environment.AmbientSource.Sky,
+            AmbientLightEnergy = 0.6f,
+            TonemapMode = Godot.Environment.ToneMapper.Aces,
+            SsaoEnabled = true,
+            GlowEnabled = true,   // makes emissive gates pop
         };
         AddChild(env);
 
-        var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(400, 400) } };
-        ground.MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.16f, 0.18f, 0.22f) };
+        // crisp anti-aliased grid ground via shader (great motion/altitude reference)
+        var gridShader = new Shader { Code = GridShaderCode };
+        var gmat = new ShaderMaterial { Shader = gridShader };
+        var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(1000, 1000) } };
+        ground.MaterialOverride = gmat;
         AddChild(ground);
 
-        var pmat = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.5f, 0.3f) };
-        for (int x = -90; x <= 90; x += 15)
-        for (int z = -90; z <= 90; z += 15)
+        BuildGates();
+    }
+
+    private void BuildGates()
+    {
+        // a simple circuit of emissive racing gates (torus) to fly through
+        var colors = new[] { new Color(1f, 0.3f, 0.4f), new Color(0.3f, 0.7f, 1f), new Color(1f, 0.8f, 0.2f) };
+        Vector2[] layout =
         {
-            if (x == 0 && z == 0) continue;
-            AddChild(new MeshInstance3D
+            new(0, 40), new(35, 75), new(0, 110), new(-45, 90),
+            new(-60, 40), new(-30, 5), new(30, 10), new(55, 45),
+        };
+        for (int i = 0; i < layout.Length; i++)
+        {
+            var mat = new StandardMaterial3D
             {
-                Mesh = new BoxMesh { Size = new Vector3(0.6f, 6f, 0.6f) },
-                Position = new Vector3(x, 3f, z),
-                MaterialOverride = pmat,
-            });
+                AlbedoColor = colors[i % colors.Length],
+                EmissionEnabled = true,
+                Emission = colors[i % colors.Length],
+                EmissionEnergyMultiplier = 2.5f,
+            };
+            var gate = new MeshInstance3D
+            {
+                Mesh = new TorusMesh { InnerRadius = 3.0f, OuterRadius = 3.6f },
+                Position = new Vector3(layout[i].X, 8f, layout[i].Y),
+                MaterialOverride = mat,
+            };
+            gate.RotateX(Mathf.Pi / 2f); // stand the ring upright to fly through
+            AddChild(gate);
         }
     }
+
+    private const string GridShaderCode = @"
+shader_type spatial;
+render_mode cull_disabled;
+uniform vec3 base_color : source_color = vec3(0.13, 0.16, 0.20);
+uniform vec3 line_color : source_color = vec3(0.35, 0.42, 0.52);
+uniform vec3 major_color : source_color = vec3(0.55, 0.65, 0.78);
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+float gridline(vec2 p, float step) {
+    vec2 g = abs(fract(p / step - 0.5) - 0.5) / fwidth(p / step);
+    return 1.0 - min(min(g.x, g.y), 1.0);
+}
+void fragment() {
+    float minor = gridline(wpos.xz, 2.0);
+    float major = gridline(wpos.xz, 20.0);
+    vec3 col = mix(base_color, line_color, minor);
+    col = mix(col, major_color, major);
+    ALBEDO = col;
+    ROUGHNESS = 1.0;
+}
+";
 }
