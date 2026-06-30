@@ -12,3 +12,6 @@ logs/
 mod/bin/
 mod/obj/
 *.user
+
+# machine-specific resolved path written by install.ps1
+scripts/gamedir.txt
