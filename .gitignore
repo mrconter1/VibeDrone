@@ -15,3 +15,10 @@ mod/obj/
 
 # machine-specific resolved path written by install.ps1
 scripts/gamedir.txt
+
+# Godot
+godot/.godot/
+godot/.mono/
+godot/bin/
+godot/obj/
+godot/*.sln

@@ -1,0 +1,17 @@
+; Godot 4 project (C#). Open this folder in Godot 4.x .NET edition.
+
+config_version=5
+
+[application]
+
+config/name="OpenDrone"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.3", "C#", "Forward Plus")
+
+[dotnet]
+
+project/assembly_name="OpenDrone"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
