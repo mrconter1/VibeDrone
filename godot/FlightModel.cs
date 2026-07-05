@@ -8,20 +8,24 @@ namespace OpenDrone
     // Port of python/the model module. Coordinates: Y up, body +Z forward, +X right.
     public sealed class FlightModel
     {
-        // --- fitted parameters (from the validated long flight) ---
-        public float G = 11.997f;            // the reference sim is ~12 m/s^2, NOT Earth's 9.81 (fitted)
+        // --- fitted parameters (the parameter set, clean aligned capture a capture run,
+        //     split vertical drag: linear accel R2 0.94, drift 4.2% @0.5s) ---
+        public float G = 10.6562f;           // fitted gravity (free param; soaks up model slack)
 
         // rate curve per axis: omega = lin*s + cubic*s^3 + bias, s = stick in [-1,1]
-        public Vector3 RollRate  = new(-2.8414f, -8.6136f, -0.0008f);   // (lin, cubic, bias)
-        public Vector3 PitchRate = new(-2.8138f, -8.7460f, -0.0145f);
-        public Vector3 YawRate   = new(-2.9686f, -8.6206f,  0.0108f);
+        public Vector3 RollRate  = new(-2.6535f, -8.9311f,  0.0005f);   // (lin, cubic, bias)
+        public Vector3 PitchRate = new(-2.7154f, -8.8841f, -0.0044f);
+        public Vector3 YawRate   = new(-2.6760f, -8.8409f,  0.0168f);
         // which body-rate axis each stick drives (x=0,y=1,z=2)
         public int RollAxis = 2, PitchAxis = 0, YawAxis = 1;
 
-        public float ThrustK = 21.14f;       // accel per unit (4*throttle^2)
-        public float DragUp = 2.155f;        // vertical body drag
-        public float DragLatKd = -0.023f;    // lateral linear drag
-        public float DragLatKq = 0.0257f;    // lateral quadratic drag
+        public float ThrustK = 28.0015f;     // accel per unit (4*throttle^2)
+        // vertical drag = DragUp + DragUpT * thrust/ThrustK: parasitic airframe part
+        // + rotor-inflow damping that vanishes with motors off (realistic free fall).
+        public float DragUp = 0.6770f;
+        public float DragUpT = 0.6295f;
+        public float DragLatKd = 0.0489f;    // lateral linear drag
+        public float DragLatKq = 0.0215f;    // lateral quadratic drag
         public float Tau = 0.005f;           // motor spool-up time constant (s)
 
         // --- state ---
@@ -48,11 +52,19 @@ namespace OpenDrone
 
         private Vector3 BodyRates(float roll, float pitch, float yaw)
         {
-            var w = new float[3];
-            w[RollAxis]  = Curve(RollRate, roll);
-            w[PitchAxis] = Curve(PitchRate, pitch);
-            w[YawAxis]   = Curve(YawRate, yaw);
-            return new Vector3(w[0], w[1], w[2]);
+            // no heap allocation in the per-tick hot path
+            Vector3 w = Vector3.Zero;
+            SetAxis(ref w, RollAxis, Curve(RollRate, roll));
+            SetAxis(ref w, PitchAxis, Curve(PitchRate, pitch));
+            SetAxis(ref w, YawAxis, Curve(YawRate, yaw));
+            return w;
+        }
+
+        private static void SetAxis(ref Vector3 v, int axis, float val)
+        {
+            if (axis == 0) v.X = val;
+            else if (axis == 1) v.Y = val;
+            else v.Z = val;
         }
 
         // rotate v by q (or its inverse). System.Numerics quaternions are (x,y,z,w).
@@ -78,7 +90,8 @@ namespace OpenDrone
             float spd = vel.Length();
             Vector3 vb = Rotate(q, vel, inverse: true);
             float lat = DragLatKd + DragLatKq * spd;
-            var aBody = new Vector3(-lat * vb.X, thrust - DragUp * vb.Y, -lat * vb.Z);
+            float dup = DragUp + DragUpT * (thrust / MathF.Max(ThrustK, 1e-6f));
+            var aBody = new Vector3(-lat * vb.X, thrust - dup * vb.Y, -lat * vb.Z);
             return Rotate(q, aBody) + new Vector3(0f, -G, 0f);
         }
 

@@ -15,7 +15,7 @@ public partial class DroneController : Node3D
     [Export] public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
     [Export] public float SignRoll = 1f, SignPitch = -1f, SignYaw = -1f, SignThrottle = 1f;
     [Export] public float CameraTiltDeg = 25f;
-    [Export] public int Substeps = 4;
+    [Export] public int Substeps = 1;   // physics already ticks at 250 Hz (project.godot)
     [Export] public bool Replay = false;                 // start live; Tab to watch recorded replay
     [Export] public string ReplayFile = "res://replay.csv";
 
@@ -103,9 +103,10 @@ public partial class DroneController : Node3D
         _curThrottle = throttle;
         _flightTime += (float)delta;
 
-        // speed-scaled FOV for the FPV "rush"
+        // speed-scaled FOV for the FPV "rush" (time-based smoothing: tick-rate independent)
         float spd = _fm.Vel.Length();
-        _cam.Fov = Mathf.Lerp(_cam.Fov, 95f + Mathf.Min(spd, 40f) * 0.9f, 0.1f);
+        float k = 1f - Mathf.Exp(-6f * (float)delta);
+        _cam.Fov = Mathf.Lerp(_cam.Fov, 95f + Mathf.Min(spd, 40f) * 0.9f, k);
 
         ApplyHud("LIVE");
     }
@@ -136,12 +137,17 @@ public partial class DroneController : Node3D
         _flightTime = 0f;
         if (Replay && _rt.Count > 0) ApplyTransform(_rpos[0], _rquat[0]);
         else ApplyTransform(_fm.Pos, _fm.Rot);
+        _drone.ResetPhysicsInterpolation();   // teleport: don't sweep from the old pose
     }
 
     private void PlayReplay(float delta)
     {
         _replayT += delta;
-        if (_replayT > _rt[_rt.Count - 1]) _replayT = 0f;     // loop
+        if (_replayT > _rt[_rt.Count - 1])                     // loop = teleport
+        {
+            _replayT = 0f;
+            _drone.ResetPhysicsInterpolation();
+        }
         int i = 1;
         while (i < _rt.Count && _rt[i] < _replayT) i++;
         if (i >= _rt.Count) i = _rt.Count - 1;

@@ -15,3 +15,13 @@ project/assembly_name="OpenDrone"
 [input_devices]
 
 pointing/emulate_touch_from_mouse=false
+
+[physics]
+
+; 250 Hz flight-model tick (4 ms): input sampled and transform updated every 4 ms
+; instead of 16.7 ms -> lower stick-to-photon latency, smoother high-refresh motion.
+; The model is ~100 flops/step; this is nowhere near a CPU cost.
+common/physics_ticks_per_second=250
+; interpolate node transforms between physics ticks for refresh rates beyond 250 Hz
+; and to hide tick/frame beat frequencies.
+common/physics_interpolation=true
