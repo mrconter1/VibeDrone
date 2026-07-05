@@ -31,10 +31,16 @@ Two input sources, by design:
 
 | Path | What |
 |---|---|
-| `mod/Plugin.cs` | the tooling 5 plugin: reads drone Rigidbody + inputs each `FixedUpdate`, sends UDP JSON |
+| `mod/Plugin.cs` | the tooling 5 plugin: samples drone Rigidbody + inputs per physics tick (Harmony postfix on the drone's own `FixedUpdate` for defined tick alignment), batches newline-separated JSON over UDP via a background thread |
 | `mod/OpenDroneTelemetry.csproj` | build file (edit `GameDir`) |
-| `python/the logger.py` | UDP -> flat CSV |
+| `python/the logger.py` | UDP -> flat CSV (handles batched packets, reports drops via `n` counter) |
 | `python/the capture tool.py` | raw controller -> CSV (pygame) |
+| `python/check_alignment.py` | verify input/state tick alignment of a capture (run once per plugin change) |
+| `python/excitation.py` | drive the game with reproducible test patterns via a virtual pad (vgamepad/ViGEm) for system ID |
+| `python/the fitter.py` | grey-box parameter fit (+ `--refine` trajectory fit, `--dump the parameter set`) |
+| `python/residuals.py` | residual-structure analysis: which model term to fix next |
+| `python/the validator.py` | out-of-sample validation; `--sweep` = divergence-horizon curve (THE regression metric) |
+| `python/fly_sim.py` | pygame FPV sim running the fitted model |
 | `FINDINGS.md` | engine/anti-cheat/class-name findings |
 
 ## Setup
@@ -79,6 +85,27 @@ to capture always.
 ### 4. Fit the model
 ```powershell
 .\.venv\Scripts\python python\the fitter.py logs\run_*.csv
+```
+
+## Model-improvement workflow (measure, don't guess)
+
+```powershell
+# 0. after any plugin change: confirm the capture itself is sound
+.\.venv\Scripts\python python\check_alignment.py logs\run_NEW.csv
+
+# 1. capture designed identification flights (needs: pip install vgamepad, map the
+#    virtual Xbox pad in the reference sim once). Run with the logger listening.
+.\.venv\Scripts\python python\excitation.py all
+
+# 2. fit, including the excitation captures
+.\.venv\Scripts\python python\the fitter.py "logs\run_*.csv" --refine --dump the parameter set
+
+# 3. where is the model still wrong, and against what?
+.\.venv\Scripts\python python\residuals.py logs\run_HELD_OUT.csv --params the parameter set --plot
+
+# 4. the regression metric: divergence-horizon curve on a held-out flight.
+#    Save this table before/after every model change.
+.\.venv\Scripts\python python\the validator.py logs\run_HELD_OUT.csv --fit-csv "logs\run_FIT*.csv" --sweep --plot
 ```
 
 ## CSV columns
