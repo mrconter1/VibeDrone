@@ -19,7 +19,12 @@ namespace OpenDrone
         // which body-rate axis each stick drives (x=0,y=1,z=2)
         public int RollAxis = 2, PitchAxis = 0, YawAxis = 1;
 
-        public float ThrustK = 28.0015f;     // accel per unit (4*throttle^2)
+        public float ThrustK = 28.0015f;     // accel per proxy unit
+        // mixer proxy ~ sum(motor_norm^2): m0*4t^2 + s2*(m1 + m2*t + m3*t^2) + m4 + m5*t,
+        // s2 = roll^2+pitch^2+yaw^2. Captures motor spread for rotation + saturation;
+        // matches the perfect per-motor thrust ceiling in validation (R2 0.968 vs 0.941).
+        public float Mix0 = 0.794f, Mix1 = 0.064f, Mix2 = 0.166f,
+                     Mix3 = -0.498f, Mix4 = 0.126f, Mix5 = 0.549f;
         // vertical drag = DragUp + DragUpT * thrust/ThrustK: parasitic airframe part
         // + rotor-inflow damping that vanishes with motors off (realistic free fall).
         public float DragUp = 0.6770f;
@@ -100,7 +105,11 @@ namespace OpenDrone
         {
             Rot = IntegrateQuat(Rot, BodyRates(roll, pitch, yaw), dt);
 
-            float target = ThrustK * 4f * throttle * throttle;
+            float s2 = roll * roll + pitch * pitch + yaw * yaw;
+            float proxy = MathF.Max(0f, Mix0 * 4f * throttle * throttle
+                          + s2 * (Mix1 + Mix2 * throttle + Mix3 * throttle * throttle)
+                          + Mix4 + Mix5 * throttle);
+            float target = ThrustK * proxy;
             Thrust += (target - Thrust) * MathF.Min(dt / MathF.Max(Tau, 1e-4f), 1f);
 
             // RK4 on translation, Rot & Thrust held over the step
