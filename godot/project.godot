@@ -16,6 +16,13 @@ project/assembly_name="OpenDrone"
 
 pointing/emulate_touch_from_mouse=false
 
+[rendering]
+
+; Default to the D3D12 backend on Windows. The AMD Radeon 740M iGPU intermittently
+; segfaults inside the Vulkan driver at startup; D3D12 sidesteps that path entirely and
+; runs the Forward+ renderer cleanly. Other platforms keep their default (Vulkan).
+rendering_device/driver.windows="d3d12"
+
 [physics]
 
 ; 250 Hz flight-model tick (4 ms): input sampled and transform updated every 4 ms

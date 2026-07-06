@@ -12,8 +12,9 @@
     since the last build, so an unchanged relaunch starts without the ~2s MSBuild step.
 
 .NOTES
-    If Godot crashes at startup (the AMD Radeon 740M iGPU can segfault inside the
-    Vulkan driver), the script automatically retries once on the D3D12 backend.
+    The project defaults to the D3D12 backend on Windows (project.godot) to avoid the
+    AMD Radeon 740M Vulkan startup crash. If D3D12 fails to start, the script retries
+    once on Vulkan.
 #>
 [CmdletBinding()]
 param(
@@ -73,11 +74,11 @@ if ($Editor) {
 } else {
     Write-Host "Launching game (Esc quit, R reset, Tab replay) ..." -ForegroundColor Green
     & $Godot --path $GodotDir
-    # The AMD Radeon 740M iGPU occasionally segfaults (signal 11) inside the Vulkan
-    # driver at startup. That is a native driver crash, not a game bug - retry once on
-    # the D3D12 backend, which sidesteps the AMD Vulkan path entirely.
+    # The project now defaults to the D3D12 backend (project.godot) to avoid the AMD
+    # Radeon 740M Vulkan startup crash. If D3D12 ever fails to start on some other GPU,
+    # retry once on Vulkan as a fallback.
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Godot exited with code $LASTEXITCODE (likely a Vulkan driver crash) - retrying on D3D12 ..." -ForegroundColor Yellow
-        & $Godot --rendering-driver d3d12 --path $GodotDir
+        Write-Host "Godot exited with code $LASTEXITCODE - retrying on the Vulkan backend ..." -ForegroundColor Yellow
+        & $Godot --rendering-driver vulkan --path $GodotDir
     }
 }
