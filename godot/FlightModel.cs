@@ -93,6 +93,16 @@ namespace OpenDrone
             return Quaternion.Normalize(q * dq);
         }
 
+        // Mixer-aware thrust proxy ~ sum(motor_norm^2); legacy mix -> 4*throttle^2.
+        // Matches the model module thrust_proxy so both sims produce identical thrust.
+        public float ThrustProxy(float roll, float pitch, float yaw, float throttle)
+        {
+            float s2 = roll * roll + pitch * pitch + yaw * yaw;
+            return MathF.Max(0f, Mix0 * 4f * throttle * throttle
+                   + s2 * (Mix1 + Mix2 * throttle + Mix3 * throttle * throttle)
+                   + Mix4 + Mix5 * throttle);
+        }
+
         private Vector3 Accel(Vector3 vel, Quaternion q, float thrust)
         {
             float spd = vel.Length();
@@ -111,11 +121,7 @@ namespace OpenDrone
             Omega += (targetRate - Omega) * MathF.Min(dt / MathF.Max(TauRate, 1e-4f), 1f);
             Rot = IntegrateQuat(Rot, Omega, dt);
 
-            float s2 = roll * roll + pitch * pitch + yaw * yaw;
-            float proxy = MathF.Max(0f, Mix0 * 4f * throttle * throttle
-                          + s2 * (Mix1 + Mix2 * throttle + Mix3 * throttle * throttle)
-                          + Mix4 + Mix5 * throttle);
-            float target = ThrustK * proxy;
+            float target = ThrustK * ThrustProxy(roll, pitch, yaw, throttle);
             Thrust += (target - Thrust) * MathF.Min(dt / MathF.Max(Tau, 1e-4f), 1f);
 
             // RK4 on translation, Rot & Thrust held over the step
