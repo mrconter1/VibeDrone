@@ -312,7 +312,7 @@ public partial class DroneController : Node3D
             TonemapMode = Godot.Environment.ToneMapper.Aces,
             // SSAO off: costly on an integrated GPU and adds nothing on a flat grid scene
             SsaoEnabled = false,
-            GlowEnabled = true,   // makes emissive gates pop (cheap enough, keep)
+            GlowEnabled = false,  // off: bloom was washing the green gates toward yellow
         };
         AddChild(env);
 
@@ -349,9 +349,10 @@ public partial class DroneController : Node3D
     private static Node3D SquareFrame(Color c, float z)
     {
         var frame = new Node3D { Position = new Vector3(0f, 0f, z) };
+        // moderate emission (no glow now) so the colour stays true instead of blowing out
         var mat = new StandardMaterial3D
         {
-            AlbedoColor = c, EmissionEnabled = true, Emission = c, EmissionEnergyMultiplier = 2.5f,
+            AlbedoColor = c, EmissionEnabled = true, Emission = c, EmissionEnergyMultiplier = 1.0f,
         };
         const float half = 3.0f, t = 0.3f;      // 6 m opening, 0.3 m bars
         const float outer = half * 2f + t, off = half + t * 0.5f;
