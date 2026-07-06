@@ -29,3 +29,6 @@ validate-cs/obj/
 
 # Godot session perf log
 *.log
+
+# exported release build
+build/
