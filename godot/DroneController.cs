@@ -25,8 +25,6 @@ public partial class DroneController : Node3D
     [Export] public float DroneRadius = 0.15f;   // ~5" quad half-width, for gate collision
     [Export] public float Restitution = 0.18f;   // normal rebound (low: real quads barely bounce)
     [Export] public float HitFriction = 0.55f;   // tangential speed scrubbed off on a hit (deflect, not slide)
-    [Export] public bool Replay = false;                 // start live; Tab to watch recorded replay
-    [Export] public string ReplayFile = "res://replay.csv";
 
     private readonly FlightModel _fm = new();
     private CharacterBody3D _drone = null!;   // kinematic body so it can collide/bounce off gates
@@ -68,12 +66,6 @@ public partial class DroneController : Node3D
     private readonly List<float> _trailAge = new();
     private readonly List<Vector3> _trailRight = new(); // drone right-axis at each point (ribbon roll)
     private PlaybackController _playback = null!;
-
-    // replay data
-    private readonly List<float> _rt = new();
-    private readonly List<NVec> _rpos = new();
-    private readonly List<NQuat> _rquat = new();
-    private float _replayT;
 
     public override void _Ready()
     {
@@ -150,7 +142,6 @@ public partial class DroneController : Node3D
         LoadLaps();
         LoadGhost();
 
-        if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
         StartRace();   // begin in fly mode, held fixed at the start line, engine off
     }
@@ -163,12 +154,11 @@ public partial class DroneController : Node3D
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        if (ev is InputEventKey { Pressed: true } k)
+        // R restarts the race; Esc/M/E are handled by the pause/sound/edit controllers.
+        if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
         {
-            if (k.Keycode == Key.Escape) GetTree().Quit();
-            else if (k.Keycode == Key.R) { _sessionLog.Mark("race start"); StartRace(); }
-            else if (k.Keycode == Key.Tab) { Replay = !Replay; if (Replay && _rt.Count == 0) LoadReplay(); _replayT = 0; ResetDrone(); }
-            // S opens the sound menu (handled by SoundMenu, which also pauses the game)
+            _sessionLog.Mark("race start");
+            StartRace();
         }
     }
 
@@ -176,8 +166,6 @@ public partial class DroneController : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (Replay && _rt.Count > 1) { PlayReplay((float)delta); _audio.SetEffort(0f); ApplyHud("REPLAY (Tab=live)"); return; }
-
         float roll, pitch, yaw, throttle;
         if (Input.GetConnectedJoypads().Count > 0)
         {
@@ -291,27 +279,19 @@ public partial class DroneController : Node3D
     private void ResetDrone()
     {
         _fm.Reset();
-        _replayT = 0f;
         _flightTime = 0f;
-        if (Replay && _rt.Count > 0)
-        {
-            ApplyTransform(_rpos[0], _rquat[0]);
-        }
-        else
-        {
-            // spawn in the centre of the start/finish gate, level, facing OUT toward gate 1
-            Vector3 pos = _arena.StartTransform.Origin;
-            Vector3 look = _arena.Gates.Count > 1
-                ? _arena.Gates[1].GlobalPosition - pos
-                : -_arena.StartTransform.Basis.Z;
-            look.Y = 0f;
-            if (look.LengthSquared() < 1e-4f) look = Vector3.Forward;
-            look = look.Normalized();
-            _fm.Pos = new NVec(pos.X, pos.Y, -pos.Z);
-            float yawModel = Mathf.Atan2(look.X, -look.Z);          // Godot dir -> model yaw (+Z fwd, Z flip)
-            _fm.Rot = NQuat.CreateFromAxisAngle(NVec.UnitY, yawModel);
-            ApplyTransform(_fm.Pos, _fm.Rot);
-        }
+        // spawn in the centre of the start/finish gate, level, facing OUT toward gate 1
+        Vector3 pos = _arena.StartTransform.Origin;
+        Vector3 look = _arena.Gates.Count > 1
+            ? _arena.Gates[1].GlobalPosition - pos
+            : -_arena.StartTransform.Basis.Z;
+        look.Y = 0f;
+        if (look.LengthSquared() < 1e-4f) look = Vector3.Forward;
+        look = look.Normalized();
+        _fm.Pos = new NVec(pos.X, pos.Y, -pos.Z);
+        float yawModel = Mathf.Atan2(look.X, -look.Z);          // Godot dir -> model yaw (+Z fwd, Z flip)
+        _fm.Rot = NQuat.CreateFromAxisAngle(NVec.UnitY, yawModel);
+        ApplyTransform(_fm.Pos, _fm.Rot);
         _drone.ResetPhysicsInterpolation();   // teleport: don't sweep from the old pose
     }
 
@@ -566,41 +546,6 @@ public partial class DroneController : Node3D
         SaveGhost();   // writes an empty list
     }
 
-    private void PlayReplay(float delta)
-    {
-        _replayT += delta;
-        if (_replayT > _rt[_rt.Count - 1])                     // loop = teleport
-        {
-            _replayT = 0f;
-            _drone.ResetPhysicsInterpolation();
-        }
-        int i = 1;
-        while (i < _rt.Count && _rt[i] < _replayT) i++;
-        if (i >= _rt.Count) i = _rt.Count - 1;
-        float a = (_replayT - _rt[i - 1]) / Mathf.Max(_rt[i] - _rt[i - 1], 1e-5f);
-        NVec p = NVec.Lerp(_rpos[i - 1], _rpos[i], a);
-        NQuat q = NQuat.Slerp(_rquat[i - 1], _rquat[i], a);
-        ApplyTransform(p, q);
-    }
-
-    private void LoadReplay()
-    {
-        _rt.Clear(); _rpos.Clear(); _rquat.Clear();
-        using var f = FileAccess.Open(ReplayFile, FileAccess.ModeFlags.Read);
-        if (f == null) { GD.PrintErr("replay file not found: " + ReplayFile); return; }
-        f.GetLine(); // header
-        while (!f.EofReached())
-        {
-            string line = f.GetLine();
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            string[] c = line.Split(',');
-            if (c.Length < 8) continue;
-            _rt.Add(c[0].ToFloat());
-            _rpos.Add(new NVec(c[1].ToFloat(), c[2].ToFloat(), c[3].ToFloat()));
-            _rquat.Add(new NQuat(c[4].ToFloat(), c[5].ToFloat(), c[6].ToFloat(), c[7].ToFloat()));
-        }
-        GD.Print($"replay loaded: {_rt.Count} frames");
-    }
 
     private void ApplyHud(string mode)
     {
