@@ -317,12 +317,11 @@ public partial class DroneController : Node3D
     private bool MissedGate()
     {
         int regular = _arena.GateTriggers.Count - 1;
-        int nextIdx = _gatePassed < regular ? _gatePassed + 1 : 0;
+        int nextIdx = RaceLogic.NextGate(_gatePassed, regular);
         if (nextIdx >= _arena.Gates.Count) return false;
         Vector3 local = _arena.Gates[nextIdx].GlobalTransform.AffineInverse() * _drone.GlobalPosition;
-        bool missed = false;
-        if (nextIdx == _missGate && _missPrevZ < 0f && local.Z >= 0f)
-            missed = Mathf.Abs(local.X) > 3.4f || Mathf.Abs(local.Y) > 3.4f;   // crossed plane, outside opening
+        // only judge a miss once we have a previous sample for THIS gate (same-gate plane crossing)
+        bool missed = nextIdx == _missGate && RaceLogic.FlewPastGate(_missPrevZ, local.X, local.Y, local.Z);
         _missGate = nextIdx;
         _missPrevZ = local.Z;
         return missed;
@@ -337,13 +336,13 @@ public partial class DroneController : Node3D
         int regular = _arena.GateTriggers.Count - 1;    // gates 1..n-1
         if (index == 0)                                  // start/finish line
         {
-            if (_gatePassed >= regular)                  // valid lap: all gates cleared
+            if (RaceLogic.LapValid(_gatePassed, regular)) // valid lap: all gates cleared
                 _recorder.CompleteLap(_lapTime);         // records the lap + best ghost
             _lapTime = 0f;                               // (re)start the lap timer
             _gatePassed = 0;
             BeginLap();
         }
-        else if (index == _gatePassed + 1)               // next regular gate, in order
+        else if (RaceLogic.IsNextRegular(index, _gatePassed))   // next regular gate, in order
         {
             _gatePassed++;
         }

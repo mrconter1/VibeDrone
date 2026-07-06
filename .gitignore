@@ -19,3 +19,7 @@ logs/
 
 # exported release build
 build/
+
+# test project build output
+tests/bin/
+tests/obj/
