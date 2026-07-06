@@ -60,8 +60,7 @@ public partial class DroneController : Node3D
     private float _recAccum;
     private int _ghostIdx;
     private DroneModel _ghost = null!;
-    private MeshInstance3D _trail = null!;
-    private ImmediateMesh _trailMesh = null!;
+    private TrailRibbon _trail = null!;
     private readonly List<Vector3> _trailPts = new();   // reused each frame (no per-frame alloc)
     private readonly List<float> _trailAge = new();
     private readonly List<Vector3> _trailRight = new(); // drone right-axis at each point (ribbon roll)
@@ -120,23 +119,7 @@ public partial class DroneController : Node3D
         _ghost = new DroneModel { Ghost = true, Visible = false };
         AddChild(_ghost);
 
-        _trailMesh = new ImmediateMesh();
-        _trail = new MeshInstance3D
-        {
-            Mesh = _trailMesh,
-            Visible = false,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            MaterialOverride = new StandardMaterial3D
-            {
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                VertexColorUseAsAlbedo = true,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                EmissionEnabled = true,
-                Emission = new Color(0.3f, 0.95f, 1f),
-                EmissionEnergyMultiplier = 3f,   // blooms via the high-threshold glow
-            },
-        };
+        _trail = new TrailRibbon();
         AddChild(_trail);
 
         LoadLaps();
@@ -395,8 +378,7 @@ public partial class DroneController : Node3D
     // popping a whole sample at a time.
     private void BuildTrail()
     {
-        _trailMesh.ClearSurfaces();
-        const float window = 1.2f, halfW = 0.35f;
+        const float window = 1.2f, halfW = 0.4f;
         if (_bestGhost.Count < 2) { _trail.Visible = false; return; }
 
         float tailT = Mathf.Max(_lapTime - window, _bestGhost[0].T);
@@ -422,28 +404,7 @@ public partial class DroneController : Node3D
         SampleBestLap(_lapTime, out Vector3 hp, out Quaternion hr);
         _trailPts.Add(hp); _trailAge.Add(0f); _trailRight.Add(new Basis(hr).X);
 
-        EmitTrail(halfW);
-    }
-
-    // Build the ribbon from _trailPts/_trailAge/_trailRight: rolls with the drone, tapers to the tail.
-    private void EmitTrail(float halfW)
-    {
-        _trail.Visible = true;
-        _trailMesh.SurfaceBegin(Mesh.PrimitiveType.TriangleStrip);
-        int last = _trailPts.Count - 1;
-        for (int i = 0; i <= last; i++)
-        {
-            Vector3 r = _trailRight[i];
-            Vector3 side = r.LengthSquared() > 1e-6f ? r.Normalized() : Vector3.Right;
-            side *= halfW * (1f - _trailAge[i]);   // taper: full at the drone, point at the tail
-            float a = 1f - _trailAge[i];
-            var col = new Color(0.4f, 0.95f, 1f, a * a);
-            _trailMesh.SurfaceSetColor(col);
-            _trailMesh.SurfaceAddVertex(_trailPts[i] - side);
-            _trailMesh.SurfaceSetColor(col);
-            _trailMesh.SurfaceAddVertex(_trailPts[i] + side);
-        }
-        _trailMesh.SurfaceEnd();
+        _trail.Build(_trailPts, _trailRight, _trailAge, halfW);
     }
 
     private void SaveGhost()
