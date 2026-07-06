@@ -6,11 +6,12 @@ public partial class PauseMenu : CanvasLayer
 {
     private DroneController _ctrl = null!;
     private SoundMenu _sound = null!;
+    private HelpOverlay _help = null!;
     private Panel _panel = null!;
     private Button _debugBtn = null!;
     private bool _open;
 
-    public void Setup(DroneController ctrl, SoundMenu sound) { _ctrl = ctrl; _sound = sound; }
+    public void Setup(DroneController ctrl, SoundMenu sound, HelpOverlay help) { _ctrl = ctrl; _sound = sound; _help = help; }
 
     public override void _Ready()
     {
@@ -40,11 +41,11 @@ public partial class PauseMenu : CanvasLayer
     private void BuildUi()
     {
         Vector2I win = DisplayServer.WindowGetSize();
-        _panel = new Panel { Size = new Vector2(300, 488), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 244) };
+        _panel = new Panel { Size = new Vector2(300, 542), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 271) };
         _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.94f);
         AddChild(_panel);
 
-        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 440) };
+        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 494) };
         v.AddThemeConstantOverride("separation", 14);
         _panel.AddChild(v);
 
@@ -64,6 +65,8 @@ public partial class PauseMenu : CanvasLayer
         AddButton(v, "Playback best lap", () => { SetOpen(false); _ctrl.StartPlayback(); });
 
         AddButton(v, "Sound settings", () => { SetOpen(false); _sound.SetOpen(true); });
+
+        AddButton(v, "Controls", () => { SetOpen(false); _help.SetOpen(true); });
 
         Button clearBtn = null!;
         clearBtn = AddButton(v, "Clear results", () => { _ctrl.ClearResults(); clearBtn.Text = "Cleared!"; });

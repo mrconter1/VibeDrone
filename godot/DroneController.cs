@@ -55,6 +55,7 @@ public partial class DroneController : Node3D
 
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
+    private HelpOverlay _help = null!;
 
     public override void _Ready()
     {
@@ -95,8 +96,11 @@ public partial class DroneController : Node3D
         _playback.Setup(_recorder, _cam);
         AddChild(_playback);
 
+        _help = new HelpOverlay();
+        AddChild(_help);      // H opens it (or the pause-menu Controls button)
+
         var pause = new PauseMenu();
-        pause.Setup(this, menu);
+        pause.Setup(this, menu, _help);
         AddChild(pause);      // Esc opens it
 
         var edit = new EditController();
@@ -122,6 +126,10 @@ public partial class DroneController : Node3D
         {
             _sessionLog.Mark("race start");
             StartRace();
+        }
+        else if (ev is InputEventKey { Pressed: true, Keycode: Key.H })
+        {
+            _help.SetOpen(!_help.IsOpen);
         }
     }
 
