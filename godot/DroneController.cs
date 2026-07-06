@@ -141,10 +141,20 @@ public partial class DroneController : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        ReadInput(delta, out float roll, out float pitch, out float yaw, out float throttle);
+        if (_raceArmed && !TryStart(delta, roll, pitch, yaw, throttle)) return;   // holding at the start line
+        StepFlight(delta, roll, pitch, yaw, throttle);
+        if (CheckRaceEvents(delta)) return;                                        // restarted this tick
+        DriveAudio(roll, pitch, yaw, throttle);
+        ApplyHud("LIVE");
+    }
+
+    // Read the current stick/throttle from the pad (or keyboard fallback) and apply axis signs.
+    private void ReadInput(double delta, out float roll, out float pitch, out float yaw, out float throttle)
+    {
         if (Engine.GetPhysicsFrames() % 15 == 0)   // refresh joypad presence occasionally (avoids per-tick alloc)
             _hasJoypad = Input.GetConnectedJoypads().Count > 0;
 
-        float roll, pitch, yaw, throttle;
         if (_hasJoypad)
         {
             roll = Dead(_axes[AxisRoll]); pitch = Dead(_axes[AxisPitch]); yaw = Dead(_axes[AxisYaw]);
@@ -161,25 +171,33 @@ public partial class DroneController : Node3D
         }
         roll *= SignRoll; pitch *= SignPitch; yaw *= SignYaw;
         if (SignThrottle < 0) throttle = 1f - throttle;
+    }
 
-        // armed at the start line: hold fixed until the pilot gives input, then the clock starts.
-        // The first ~0.4s just settles the input baseline (controller axes arrive a few frames
-        // after launch, so an early baseline would misfire and let the drone drop).
-        if (_raceArmed)
+    // Armed at the start line: hold fixed and idle until the pilot gives input, then the clock
+    // starts. The first ~0.4s just settles the input baseline (controller axes arrive a few frames
+    // after launch, so an early baseline would misfire and let the drone drop). Returns true once
+    // the race has started (flight should run this tick), false while still holding at the line.
+    private bool TryStart(double delta, float roll, float pitch, float yaw, float throttle)
+    {
+        _armSettle += (float)delta;
+        if (_armSettle < 0.4f)
         {
-            _armSettle += (float)delta;
-            if (_armSettle < 0.4f)
-            {
-                _armThrottle = throttle;   // keep tracking the resting value while it settles
-                _curThrottle = throttle; _audio.SetEffort(0f); _recorder.HideGhost();
-                ApplyHud("LIVE"); return;
-            }
+            _armThrottle = throttle;   // keep tracking the resting value while it settles
+        }
+        else
+        {
             bool go = Mathf.Abs(throttle - _armThrottle) > 0.08f
                    || Mathf.Abs(roll) > 0.06f || Mathf.Abs(pitch) > 0.06f || Mathf.Abs(yaw) > 0.06f;
-            if (go) { _raceArmed = false; _raceRunning = true; BeginLap(); }
-            else { _curThrottle = throttle; _audio.SetEffort(0f); _recorder.HideGhost(); ApplyHud("LIVE"); return; }
+            if (go) { _raceArmed = false; _raceRunning = true; BeginLap(); return true; }
         }
+        _curThrottle = throttle; _audio.SetEffort(0f); _recorder.HideGhost();   // idle: no clock, no ghost
+        ApplyHud("LIVE");
+        return false;
+    }
 
+    // Integrate the flight model (substepped) and move the body, bouncing off gate bars.
+    private void StepFlight(double delta, float roll, float pitch, float yaw, float throttle)
+    {
         float dt = (float)delta / Substeps;
         for (int i = 0; i < Substeps; i++)
             _fm.Step(roll, pitch, yaw, throttle, dt);
@@ -187,22 +205,25 @@ public partial class DroneController : Node3D
         MoveDroneWithBounce();
         _curThrottle = throttle;
         _flightTime += (float)delta;
-        if (_raceRunning)
-        {
-            _lapTime += (float)delta;
-            _recorder.Record((float)delta, _lapTime, _drone.GlobalPosition, _drone.GlobalTransform.Basis.GetRotationQuaternion());
-            // touch a bar / fly past a gate / hit the ground -> back to the start line (same as R)
-            if (_gateHit || MissedGate() || _drone.GlobalPosition.Y < 0.5f) { StartRace(); return; }
-        }
+    }
 
-        // drive motor audio from throttle AND stick activity, so rolls/pitches/yaws audibly
-        // rev the motors (the thrust proxy saturates and would hide that). Silent at rest.
+    // Advance the lap clock + recording, and restart on a fatal event (touch a bar / fly past a
+    // gate / hit the ground -> back to the start line, same as R). Returns true if it restarted.
+    private bool CheckRaceEvents(double delta)
+    {
+        if (!_raceRunning) return false;
+        _lapTime += (float)delta;
+        _recorder.Record((float)delta, _lapTime, _drone.GlobalPosition, _drone.GlobalTransform.Basis.GetRotationQuaternion());
+        if (_gateHit || MissedGate() || _drone.GlobalPosition.Y < 0.5f) { StartRace(); return true; }
+        return false;
+    }
+
+    // Drive motor audio from throttle AND stick activity, so rolls/pitches/yaws audibly rev the
+    // motors (the thrust proxy saturates and would hide that). Silent at rest.
+    private void DriveAudio(float roll, float pitch, float yaw, float throttle)
+    {
         float stick = Mathf.Min(1f, (Mathf.Abs(roll) + Mathf.Abs(pitch) + Mathf.Abs(yaw)) / 2f);
         _audio.SetEffort(Mathf.Clamp(throttle * 0.9f + stick * 0.5f, 0f, 1f));
-
-        // fixed FOV (typical FPV camera); no speed-scaling
-
-        ApplyHud("LIVE");
     }
 
     // --- the single verified Unity(LH, Y up, +Z fwd) -> Godot(RH, Y up, -Z fwd) conversion ---
