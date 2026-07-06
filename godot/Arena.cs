@@ -134,38 +134,25 @@ public partial class Arena : Node3D
     private static Vector2 TrackDir(int i) =>
         (Track[(i + 1) % Track.Length] - Track[i]).Normalized();
 
-    private static Godot.Collections.Dictionary XformDict(Transform3D t)
-    {
-        Quaternion q = t.Basis.GetRotationQuaternion();
-        return new Godot.Collections.Dictionary
-        {
-            { "x", t.Origin.X }, { "y", t.Origin.Y }, { "z", t.Origin.Z },
-            { "qx", q.X }, { "qy", q.Y }, { "qz", q.Z }, { "qw", q.W },
-        };
-    }
-
-    private static Transform3D DictXform(Godot.Collections.Dictionary d) => new(
-        new Basis(new Quaternion(d["qx"].AsSingle(), d["qy"].AsSingle(), d["qz"].AsSingle(), d["qw"].AsSingle())),
-        new Vector3(d["x"].AsSingle(), d["y"].AsSingle(), d["z"].AsSingle()));
+    private static Transform3D DictXform(Godot.Collections.Dictionary d) =>
+        new(new Basis(Persistence.ReadRot(d)), Persistence.ReadPos(d));
 
     // Persist every gate's position/rotation (gate 0 = start/finish). Called after an edit move.
     public void SaveLayout()
     {
         var gates = new Godot.Collections.Array();
-        foreach (Node3D g in _gates) gates.Add(XformDict(g.GlobalTransform));
-        var root = new Godot.Collections.Dictionary { { "gates", gates } };
-        using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
-        if (f != null) f.StoreString(Json.Stringify(root));
+        foreach (Node3D g in _gates)
+        {
+            Transform3D t = g.GlobalTransform;
+            gates.Add(Persistence.PoseDict(t.Origin, t.Basis.GetRotationQuaternion()));
+        }
+        Persistence.Save(SavePath, new Godot.Collections.Dictionary { { "gates", gates } });
     }
 
     // Apply a saved layout, if any, over the default positions.
     private void LoadLayout()
     {
-        if (!FileAccess.FileExists(SavePath)) return;
-        using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
-        if (f == null) return;
-        Variant parsed = Json.ParseString(f.GetAsText());
-        if (parsed.VariantType != Variant.Type.Dictionary) return;
+        if (!Persistence.TryLoad(SavePath, out Variant parsed) || parsed.VariantType != Variant.Type.Dictionary) return;
         var root = parsed.AsGodotDictionary();
         if (!root.ContainsKey("gates")) return;
         var gates = root["gates"].AsGodotArray();

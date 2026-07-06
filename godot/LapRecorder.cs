@@ -146,48 +146,35 @@ public partial class LapRecorder : Node3D
     }
 
     // --- persistence ---
+    private const string GhostPath = "user://ghost.json";
+    private const string LapsPath = "user://laptimes.json";
+
     private void SaveGhost()
     {
         var arr = new Godot.Collections.Array();
         foreach (Sample s in _bestGhost)
-            arr.Add(new Godot.Collections.Dictionary
-            {
-                { "t", s.T }, { "x", s.Pos.X }, { "y", s.Pos.Y }, { "z", s.Pos.Z },
-                { "qx", s.Rot.X }, { "qy", s.Rot.Y }, { "qz", s.Rot.Z }, { "qw", s.Rot.W },
-            });
-        using var f = FileAccess.Open("user://ghost.json", FileAccess.ModeFlags.Write);
-        if (f != null) f.StoreString(Json.Stringify(arr));
+        {
+            var d = Persistence.PoseDict(s.Pos, s.Rot);
+            d["t"] = s.T;
+            arr.Add(d);
+        }
+        Persistence.Save(GhostPath, arr);
     }
 
     private void LoadGhost()
     {
-        const string path = "user://ghost.json";
-        if (!FileAccess.FileExists(path)) return;
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-        if (f == null) return;
-        Variant parsed = Json.ParseString(f.GetAsText());
-        if (parsed.VariantType != Variant.Type.Array) return;
+        if (!Persistence.TryLoad(GhostPath, out Variant parsed) || parsed.VariantType != Variant.Type.Array) return;
         _bestGhost = new List<Sample>();
         foreach (Variant v in parsed.AsGodotArray())
         {
             var d = v.AsGodotDictionary();
-            _bestGhost.Add(new Sample
-            {
-                T = d["t"].AsSingle(),
-                Pos = new Vector3(d["x"].AsSingle(), d["y"].AsSingle(), d["z"].AsSingle()),
-                Rot = new Quaternion(d["qx"].AsSingle(), d["qy"].AsSingle(), d["qz"].AsSingle(), d["qw"].AsSingle()),
-            });
+            _bestGhost.Add(new Sample { T = d["t"].AsSingle(), Pos = Persistence.ReadPos(d), Rot = Persistence.ReadRot(d) });
         }
     }
 
     private void LoadLaps()
     {
-        const string path = "user://laptimes.json";
-        if (!FileAccess.FileExists(path)) return;
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-        if (f == null) return;
-        Variant parsed = Json.ParseString(f.GetAsText());
-        if (parsed.VariantType != Variant.Type.Array) return;
+        if (!Persistence.TryLoad(LapsPath, out Variant parsed) || parsed.VariantType != Variant.Type.Array) return;
         foreach (Variant v in parsed.AsGodotArray()) _bestLaps.Add(v.AsSingle());
         _bestLaps.Sort();
         RebuildRanks();
@@ -197,7 +184,6 @@ public partial class LapRecorder : Node3D
     {
         var arr = new Godot.Collections.Array();
         foreach (float t in _bestLaps) arr.Add(t);
-        using var f = FileAccess.Open("user://laptimes.json", FileAccess.ModeFlags.Write);
-        if (f != null) f.StoreString(Json.Stringify(arr));
+        Persistence.Save(LapsPath, arr);
     }
 }
