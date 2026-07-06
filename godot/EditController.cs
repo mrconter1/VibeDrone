@@ -17,6 +17,7 @@ public partial class EditController : Node3D
     private Camera3D _cam = null!;
     private Camera3D _droneCam = null!;          // restored as current when leaving edit mode
     private MotorAudio _audio = null!;           // silenced while in edit mode
+    private Arena _arena = null!;                // gate layout is saved through it after a move
     private Label _hint = null!;
     private EditReticle _reticle = null!;
     private MeshInstance3D _highlight = null!;
@@ -30,7 +31,8 @@ public partial class EditController : Node3D
     private Node3D? _grabbed;                     // object being carried
     private Vector3 _grabLocalPos;                // carried object position in camera-local space
 
-    public void Setup(Camera3D droneCam, MotorAudio audio) { _droneCam = droneCam; _audio = audio; }
+    public void Setup(Camera3D droneCam, MotorAudio audio, Arena arena)
+    { _droneCam = droneCam; _audio = audio; _arena = arena; }
 
     public override void _Ready()
     {
@@ -130,7 +132,7 @@ public partial class EditController : Node3D
         }
         else
         {
-            _grabbed = null;                 // drop anything being carried
+            if (_grabbed != null) { _grabbed = null; _arena.SaveLayout(); }   // drop + persist
             _hovered = null;
             _highlight.Visible = false;
             _droneCam.MakeCurrent();         // switch view back to the drone
@@ -140,7 +142,7 @@ public partial class EditController : Node3D
     // C: pick up the highlighted object (carry it), or drop the carried one in place.
     private void GrabOrDrop()
     {
-        if (_grabbed != null) { _grabbed = null; return; }   // drop / lock in place
+        if (_grabbed != null) { _grabbed = null; _arena.SaveLayout(); return; }   // drop / lock in place + persist
         if (_hovered != null)
         {
             _grabbed = _hovered;

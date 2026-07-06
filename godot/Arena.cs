@@ -1,14 +1,25 @@
+using System.Collections.Generic;
 using Godot;
 
 // The flying environment: sun, procedural sky, grid ground, and the circuit of gates.
 // Self-contained - add it to the scene and it builds itself. Kept separate from
-// DroneController so the controller is only about flying the drone.
+// DroneController so the controller is only about flying the drone. Gate positions
+// persist to user://gates.json (saved on edit, loaded on launch).
 public partial class Arena : Node3D
 {
+    private const string SavePath = "user://gates.json";
+    private readonly List<Node3D> _gates = new();
+    private readonly List<Area3D> _triggers = new();
+
+    public IReadOnlyList<Node3D> Gates => _gates;
+    public IReadOnlyList<Area3D> GateTriggers => _triggers;
+    public Transform3D StartTransform => _gates[0].GlobalTransform;   // gate 0 = start/finish
+
     public override void _Ready()
     {
         BuildWorld();
         BuildGates();
+        LoadLayout();
     }
 
     private void BuildWorld()
@@ -51,39 +62,120 @@ public partial class Arena : Node3D
         AddChild(ground);
     }
 
+    // A looped track. Gate 0 is the black/white START-FINISH gate (spawn inside it); gates
+    // 1..5 are the numbered green/red gates. Each is yaw-oriented along the track.
+    private static readonly Vector2[] Track =
+    {
+        new(0, 20), new(28, 52), new(16, 92), new(-26, 88), new(-32, 48), new(-12, 22),
+    };
+
     private void BuildGates()
     {
-        // a circuit of square gates to fly through. Each gate has a GREEN frame on the
-        // entry side (-Z) and a RED frame on the far side (+Z), so the correct direction
-        // through is obvious. Two shared materials for all gates.
         var green = GateMaterial(new Color(0.10f, 1.0f, 0.30f));
         var red = GateMaterial(new Color(1.0f, 0.15f, 0.20f));
-        Vector2[] layout =
+        for (int i = 0; i < Track.Length; i++)
         {
-            new(0, 40), new(35, 75), new(0, 110), new(-45, 90),
-            new(-60, 40), new(-30, 5), new(30, 10), new(55, 45),
-        };
-        for (int i = 0; i < layout.Length; i++)
-        {
-            Vector2 p = layout[i];
-            var gate = new Node3D { Position = new Vector3(p.X, 8f, p.Y) };
-            gate.AddChild(SquareFrame(green, -0.18f));   // fly THROUGH the green side
-            gate.AddChild(SquareFrame(red, 0.18f));      // red = wrong side
-            gate.AddChild(new Label3D                    // floating billboard number above the gate
+            Vector2 fwd = TrackDir(i);                    // travel direction at this gate (loops)
+            float yaw = Mathf.Atan2(fwd.X, fwd.Y);        // align the gate's Z with travel
+            var gate = new Node3D
             {
-                Text = (i + 1).ToString(),
+                Position = new Vector3(Track[i].X, 8f, Track[i].Y),
+                Rotation = new Vector3(0f, yaw, 0f),
+            };
+            gate.AddChild(SquareFrame(green, -0.18f));     // fly THROUGH the green side
+            gate.AddChild(SquareFrame(red, 0.18f));        // red = wrong side
+
+            bool startFinish = i == 0;
+            if (startFinish) BuildFlag(gate);              // checkered start/finish flag above it
+            gate.AddChild(new Label3D
+            {
+                Text = startFinish ? "START / FINISH" : i.ToString(),
                 Position = new Vector3(0f, 4.6f, 0f),
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-                FontSize = 96,
-                PixelSize = 0.02f,
-                Modulate = Colors.White,
-                OutlineSize = 16,
-                OutlineModulate = Colors.Black,
+                FontSize = startFinish ? 48 : 96, PixelSize = 0.02f,
+                Modulate = Colors.White, OutlineSize = 16, OutlineModulate = Colors.Black,
             });
-            gate.AddToGroup("movable");                  // edit mode can grab it
+
+            var trigger = new Area3D();                    // pass-through detector in the opening
+            trigger.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(6f, 6f, 1f) } });
+            gate.AddChild(trigger);
+            _triggers.Add(trigger);
+
+            gate.AddToGroup("movable");                    // edit mode can grab it
             AddChild(gate);
+            _gates.Add(gate);
         }
     }
+
+    // A checkered racing flag on a pole, mounted above the start/finish gate.
+    private static void BuildFlag(Node3D gate)
+    {
+        gate.AddChild(new MeshInstance3D
+        {
+            Mesh = new CylinderMesh { TopRadius = 0.1f, BottomRadius = 0.1f, Height = 4f },
+            Position = new Vector3(0f, 5.5f, 0f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.1f, 0.1f, 0.1f) },
+        });
+        gate.AddChild(new MeshInstance3D
+        {
+            Mesh = new QuadMesh { Size = new Vector2(3f, 2f) },
+            Position = new Vector3(1.6f, 6.4f, 0f),
+            MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = CheckerShaderCode } },
+        });
+    }
+
+    // Travel direction at gate i, wrapping (it is a loop).
+    private static Vector2 TrackDir(int i) =>
+        (Track[(i + 1) % Track.Length] - Track[i]).Normalized();
+
+    private static Godot.Collections.Dictionary XformDict(Transform3D t)
+    {
+        Quaternion q = t.Basis.GetRotationQuaternion();
+        return new Godot.Collections.Dictionary
+        {
+            { "x", t.Origin.X }, { "y", t.Origin.Y }, { "z", t.Origin.Z },
+            { "qx", q.X }, { "qy", q.Y }, { "qz", q.Z }, { "qw", q.W },
+        };
+    }
+
+    private static Transform3D DictXform(Godot.Collections.Dictionary d) => new(
+        new Basis(new Quaternion(d["qx"].AsSingle(), d["qy"].AsSingle(), d["qz"].AsSingle(), d["qw"].AsSingle())),
+        new Vector3(d["x"].AsSingle(), d["y"].AsSingle(), d["z"].AsSingle()));
+
+    // Persist every gate's position/rotation (gate 0 = start/finish). Called after an edit move.
+    public void SaveLayout()
+    {
+        var gates = new Godot.Collections.Array();
+        foreach (Node3D g in _gates) gates.Add(XformDict(g.GlobalTransform));
+        var root = new Godot.Collections.Dictionary { { "gates", gates } };
+        using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
+        if (f != null) f.StoreString(Json.Stringify(root));
+    }
+
+    // Apply a saved layout, if any, over the default positions.
+    private void LoadLayout()
+    {
+        if (!FileAccess.FileExists(SavePath)) return;
+        using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
+        if (f == null) return;
+        Variant parsed = Json.ParseString(f.GetAsText());
+        if (parsed.VariantType != Variant.Type.Dictionary) return;
+        var root = parsed.AsGodotDictionary();
+        if (!root.ContainsKey("gates")) return;
+        var gates = root["gates"].AsGodotArray();
+        for (int i = 0; i < gates.Count && i < _gates.Count; i++)
+            _gates[i].GlobalTransform = DictXform(gates[i].AsGodotDictionary());
+    }
+
+    private const string CheckerShaderCode = @"
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+void fragment() {
+    vec2 g = floor(UV * 8.0);
+    float c = mod(g.x + g.y, 2.0);
+    ALBEDO = mix(vec3(0.02), vec3(0.95), c);
+}
+";
 
     // moderate emission (no glow) so the colour stays true instead of blowing out
     private static StandardMaterial3D GateMaterial(Color c) => new()

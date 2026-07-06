@@ -7,6 +7,9 @@ public partial class Hud : Control
     public float Speed, Alt, Throttle, RollDeg, PitchDeg, TimeSec, Fov, Fps;
     public string Mode = "LIVE";
     public string Sound = "OFF";
+    public float RaceTime;
+    public string RaceStatus = "";
+    public bool RaceFinished;
     public string Joypad = "";
 
     private Font _font = null!;   // set in _Ready
@@ -45,6 +48,19 @@ public partial class Hud : Control
         DrawLine(c + new Vector2(5, 0), c + new Vector2(16, 0), hudCol, 2);
         DrawLine(c + new Vector2(0, -5), c + new Vector2(0, 5), hudCol, 2);
 
+        // race clock, centred on the screen width, on a dark plate so it is always legible
+        if (_font != null)
+        {
+            float cx = GetViewportRect().Size.X * 0.5f;
+            DrawRect(new Rect2(cx - 120, 16, 240, 64), new Color(0f, 0f, 0f, 0.5f));
+            var timeCol = RaceFinished ? new Color(1f, 0.85f, 0.2f) : Colors.White;
+            DrawString(_font, new Vector2(cx - 120, 64), FmtTime(RaceTime),
+                HorizontalAlignment.Center, 240, 46, timeCol);
+            if (RaceStatus.Length > 0)
+                DrawString(_font, new Vector2(cx - 120, 96), RaceStatus,
+                    HorizontalAlignment.Center, 240, 18, new Color(1f, 1f, 1f, 0.75f));
+        }
+
         // throttle bar (right)
         float bh = 260, bx = Size.X - 60, by = c.Y - bh / 2;
         DrawRect(new Rect2(bx, by, 20, bh), new Color(0, 0, 0, 0.35f));
@@ -59,7 +75,14 @@ public partial class Hud : Control
 
         // top bar
         Text(40, 50, $"[{Mode}]   {TimeSec,5:0.0}s   FOV {Fov:0}   {Fps:0} FPS   SND {Sound}", 22, hudCol);
-        Text(40, 78, "Esc quit   R reset   Tab replay   M sound   E edit-fly", 16, dim);
+        Text(40, 78, "Esc quit   R race/start   Tab replay   M sound   E edit-fly", 16, dim);
+    }
+
+    private static string FmtTime(float t)
+    {
+        int m = (int)(t / 60f);
+        float s = t - m * 60f;
+        return m > 0 ? $"{m}:{s:00.00}" : $"{s:0.00}";
     }
 
     private void Text(float x, float y, string s, int size, Color col)

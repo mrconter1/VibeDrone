@@ -38,6 +38,16 @@ public partial class DroneController : Node3D
     private float _curThrottle;
     private readonly float[] _axes = new float[16];
     private SessionLog _sessionLog = null!;
+    private Arena _arena = null!;
+
+    // race state
+    private bool _raceArmed;       // sitting fixed at the start, waiting for the first input
+    private bool _raceRunning;     // clock ticking
+    private float _raceTime;
+    private float _armThrottle;    // throttle baseline captured when armed
+    private bool _armReady;        // baseline captured
+    private int _passed;           // gates cleared so far
+    private int[] _order = System.Array.Empty<int>();   // gate indices in pass order
 
     // replay data
     private readonly List<float> _rt = new();
@@ -54,7 +64,8 @@ public partial class DroneController : Node3D
         AddChild(_sessionLog);
 
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
-        AddChild(new Arena());
+        _arena = new Arena();
+        AddChild(_arena);   // builds gates + triggers + start marker synchronously
 
         _drone = new CharacterBody3D();
         AddChild(_drone);
@@ -77,8 +88,20 @@ public partial class DroneController : Node3D
         AddChild(menu);       // S opens/closes it and pauses the game
 
         var edit = new EditController();
-        edit.Setup(_cam, _audio);   // E toggles a Minecraft-style free-fly camera (pauses the game)
+        edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
+
+        // race gate pass-through triggers
+        for (int i = 0; i < _arena.GateTriggers.Count; i++)
+        {
+            int idx = i;
+            _arena.GateTriggers[i].BodyEntered += body => OnGatePassed(idx, body);
+        }
+        // pass order: regular gates 1..n-1, then the start/finish (gate 0) to finish
+        int n = _arena.GateTriggers.Count;
+        _order = new int[n];
+        for (int i = 0; i < n - 1; i++) _order[i] = i + 1;
+        if (n > 0) _order[n - 1] = 0;
 
         if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
@@ -96,7 +119,7 @@ public partial class DroneController : Node3D
         if (ev is InputEventKey { Pressed: true } k)
         {
             if (k.Keycode == Key.Escape) GetTree().Quit();
-            else if (k.Keycode == Key.R) { _sessionLog.Mark("reset"); ResetDrone(); }
+            else if (k.Keycode == Key.R) { _sessionLog.Mark("race start"); StartRace(); }
             else if (k.Keycode == Key.Tab) { Replay = !Replay; if (Replay && _rt.Count == 0) LoadReplay(); _replayT = 0; ResetDrone(); }
             // S opens the sound menu (handled by SoundMenu, which also pauses the game)
         }
@@ -126,6 +149,16 @@ public partial class DroneController : Node3D
         roll *= SignRoll; pitch *= SignPitch; yaw *= SignYaw;
         if (SignThrottle < 0) throttle = 1f - throttle;
 
+        // armed at the start line: hold fixed until the pilot gives input, then the clock starts
+        if (_raceArmed)
+        {
+            if (!_armReady) { _armThrottle = throttle; _armReady = true; }
+            bool go = Mathf.Abs(throttle - _armThrottle) > 0.05f
+                   || Mathf.Abs(roll) > 0.05f || Mathf.Abs(pitch) > 0.05f || Mathf.Abs(yaw) > 0.05f;
+            if (go) { _raceArmed = false; _raceRunning = true; }
+            else { _curThrottle = throttle; _audio.SetEffort(0f); ApplyHud("LIVE"); return; }
+        }
+
         float dt = (float)delta / Substeps;
         for (int i = 0; i < Substeps; i++)
             _fm.Step(roll, pitch, yaw, throttle, dt);
@@ -133,6 +166,7 @@ public partial class DroneController : Node3D
         MoveDroneWithBounce();
         _curThrottle = throttle;
         _flightTime += (float)delta;
+        if (_raceRunning) _raceTime += (float)delta;
 
         // drive motor audio from throttle AND stick activity, so rolls/pitches/yaws audibly
         // rev the motors (the thrust proxy saturates and would hide that). Silent at rest.
@@ -196,9 +230,45 @@ public partial class DroneController : Node3D
         _fm.Reset();
         _replayT = 0f;
         _flightTime = 0f;
-        if (Replay && _rt.Count > 0) ApplyTransform(_rpos[0], _rquat[0]);
-        else ApplyTransform(_fm.Pos, _fm.Rot);
+        if (Replay && _rt.Count > 0)
+        {
+            ApplyTransform(_rpos[0], _rquat[0]);
+        }
+        else
+        {
+            // spawn in the centre of the start/finish gate, level, facing OUT toward gate 1
+            Vector3 pos = _arena.StartTransform.Origin;
+            Vector3 look = _arena.Gates.Count > 1
+                ? _arena.Gates[1].GlobalPosition - pos
+                : -_arena.StartTransform.Basis.Z;
+            look.Y = 0f;
+            if (look.LengthSquared() < 1e-4f) look = Vector3.Forward;
+            look = look.Normalized();
+            _fm.Pos = new NVec(pos.X, pos.Y, -pos.Z);
+            float yawModel = Mathf.Atan2(look.X, -look.Z);          // Godot dir -> model yaw (+Z fwd, Z flip)
+            _fm.Rot = NQuat.CreateFromAxisAngle(NVec.UnitY, yawModel);
+            ApplyTransform(_fm.Pos, _fm.Rot);
+        }
         _drone.ResetPhysicsInterpolation();   // teleport: don't sweep from the old pose
+    }
+
+    private void StartRace()
+    {
+        ResetDrone();          // spawn fixed in the start/finish gate
+        _raceTime = 0f;
+        _passed = 0;
+        _raceRunning = false;
+        _raceArmed = true;     // clock starts on first input
+        _armReady = false;
+    }
+
+    // Fired by a gate's Area3D when a body enters it. Advance the race if it is the drone
+    // passing the next expected gate (in order); finish when the start/finish is crossed last.
+    private void OnGatePassed(int index, Node3D body)
+    {
+        if (!_raceRunning || body != _drone || _passed >= _order.Length || index != _order[_passed]) return;
+        _passed++;
+        if (_passed >= _order.Length) _raceRunning = false;   // finished; time frozen
     }
 
     private void PlayReplay(float delta)
@@ -249,6 +319,12 @@ public partial class DroneController : Node3D
         _osd.Fov = _cam.Fov;
         _osd.Fps = (float)Engine.GetFramesPerSecond();
         _osd.Sound = _audio.CurrentName;
+        int gates = _order.Length;
+        _osd.RaceTime = _raceTime;
+        _osd.RaceFinished = !_raceRunning && !_raceArmed && _passed >= gates && gates > 0;
+        _osd.RaceStatus = _raceArmed ? "GO! (throttle up)"
+                        : _raceRunning ? $"{_passed}/{gates} gates"
+                        : _osd.RaceFinished ? "FINISHED - R to restart" : "R to start";
         // climb angle (pitch) and roll from the drone basis, for the artificial horizon
         _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
         _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));
