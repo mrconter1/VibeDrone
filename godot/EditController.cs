@@ -21,7 +21,9 @@ public partial class EditController : Node3D
 
     private Node3D? _hovered;                     // object under the reticle (highlighted)
     private Node3D? _grabbed;                      // object being carried
-    private Vector3 _grabLocalPos;                // grabbed object position in camera-local space
+    private Transform3D _grabLocalXform;          // grabbed object's transform in camera-local space
+    private MeshInstance3D _highlight = null!;    // translucent sphere shown around the target
+    private StandardMaterial3D _highlightMat = null!;
 
     public void Setup(Camera3D droneCam) => _droneCam = droneCam;
 
@@ -44,6 +46,22 @@ public partial class EditController : Node3D
 
         _reticle = new EditReticle { Visible = false };
         layer.AddChild(_reticle);
+
+        // translucent sphere used to highlight the targeted / carried object
+        _highlightMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.3f, 1f, 0.5f, 0.16f),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,   // visible from inside too
+        };
+        _highlight = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 5f, Height = 10f },
+            MaterialOverride = _highlightMat,
+            Visible = false,
+        };
+        AddChild(_highlight);
     }
 
     public override void _UnhandledInput(InputEvent ev)
@@ -95,7 +113,8 @@ public partial class EditController : Node3D
         else
         {
             _grabbed = null;                 // drop anything being carried
-            SetHovered(null);                // clear highlight
+            _hovered = null;
+            _highlight.Visible = false;
             _droneCam.Current = true;
             Input.MouseMode = Input.MouseModeEnum.Captured;   // keep the cursor hidden
         }
@@ -108,7 +127,8 @@ public partial class EditController : Node3D
         if (_hovered != null)
         {
             _grabbed = _hovered;
-            _grabLocalPos = _cam.GlobalTransform.AffineInverse() * _grabbed.GlobalPosition;
+            // full transform relative to the camera, so it follows position AND rotation
+            _grabLocalXform = _cam.GlobalTransform.AffineInverse() * _grabbed.GlobalTransform;
         }
     }
 
@@ -125,28 +145,28 @@ public partial class EditController : Node3D
         return n as Node3D;
     }
 
-    // Highlight the hovered object by scaling it up slightly; revert the previous one.
-    private void SetHovered(Node3D? node)
-    {
-        if (node == _hovered) return;
-        if (_hovered != null) _hovered.Scale = Vector3.One;
-        _hovered = node;
-        if (_hovered != null) _hovered.Scale = Vector3.One * 1.06f;
-    }
-
     public override void _Process(double delta)
     {
         if (!_active) return;
 
-        // carry the grabbed object at its fixed camera-local offset; else highlight what we look at
+        // carry the grabbed object locked to the camera (position + rotation); else highlight
+        // whatever the reticle is pointing at
         if (_grabbed != null)
-        {
-            _grabbed.GlobalPosition = _cam.GlobalTransform * _grabLocalPos;
-        }
+            _grabbed.GlobalTransform = _cam.GlobalTransform * _grabLocalXform;
         else
+            _hovered = RaycastMovable();
+
+        // translucent sphere around the current target (green = hover, orange = carrying)
+        Node3D? focus = _grabbed ?? _hovered;
+        if (focus != null)
         {
-            SetHovered(RaycastMovable());
+            _highlight.GlobalPosition = focus.GlobalPosition;
+            _highlightMat.AlbedoColor = _grabbed != null
+                ? new Color(1f, 0.7f, 0.2f, 0.18f) : new Color(0.3f, 1f, 0.5f, 0.16f);
+            _highlight.Visible = true;
         }
+        else _highlight.Visible = false;
+
         _reticle.Highlight = _hovered != null;
         _reticle.Grabbing = _grabbed != null;
 
