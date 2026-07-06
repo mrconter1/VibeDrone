@@ -4,7 +4,7 @@ using Godot;
 // DroneController updates the public fields each frame.
 public partial class Hud : Control
 {
-    public float Speed, Alt, Throttle, RollDeg, PitchDeg, TimeSec, Fov;
+    public float Speed, Alt, Throttle, RollDeg, PitchDeg, TimeSec, Fov, Fps;
     public string Mode = "LIVE";
     public string Joypad = "";
 
@@ -50,7 +50,7 @@ public partial class Hud : Control
         Text(Size.X - 232, Size.Y - 96, "alt m", 18, dim);
 
         // top bar
-        Text(40, 50, $"[{Mode}]   {TimeSec,5:0.0}s   FOV {Fov:0}", 22, hudCol);
+        Text(40, 50, $"[{Mode}]   {TimeSec,5:0.0}s   FOV {Fov:0}   {Fps:0} FPS", 22, hudCol);
         Text(40, 78, "Esc quit   R reset   Tab replay", 16, dim);
     }
 

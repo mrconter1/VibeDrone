@@ -14,7 +14,12 @@ public partial class DroneController : Node3D
     [Export] public int JoyDevice = 0;
     [Export] public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
     [Export] public float SignRoll = 1f, SignPitch = -1f, SignYaw = -1f, SignThrottle = 1f;
-    [Export] public float CameraTiltDeg = 25f;
+    // Typical FPV camera: 120 deg FOV (common freestyle, 120-150 range), ~30 deg uptilt
+    // (freestyle 25-35), nose-mounted a little forward and up of the CG.
+    [Export] public float CameraFovDeg = 120f;
+    [Export] public float CameraTiltDeg = 30f;
+    [Export] public float CameraForward = 0.08f;   // metres in front of CG
+    [Export] public float CameraUp = 0.03f;        // metres above CG
     [Export] public int Substeps = 1;   // physics already ticks at 250 Hz (project.godot)
     [Export] public bool Replay = false;                 // start live; Tab to watch recorded replay
     [Export] public string ReplayFile = "res://replay.csv";
@@ -36,13 +41,18 @@ public partial class DroneController : Node3D
 
     public override void _Ready()
     {
+        // report the actual render backend + GPU so a software (llvmpipe) fallback is obvious
+        GD.Print($"Renderer: {ProjectSettings.GetSetting("rendering/renderer/rendering_method")}  " +
+                 $"GPU: {RenderingServer.GetVideoAdapterName()} ({RenderingServer.GetVideoAdapterVendor()})");
+
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
         BuildWorld();
 
         _drone = new Node3D();
         AddChild(_drone);
-        _cam = new Camera3D { Fov = 100f };
+        _cam = new Camera3D { Fov = CameraFovDeg };
         _drone.AddChild(_cam);
+        _cam.Position = new Vector3(0f, CameraUp, CameraForward);   // nose mount (drone local frame)
         _cam.RotationDegrees = new Vector3(CameraTiltDeg, 180f, 0f);
 
         var layer = new CanvasLayer();
@@ -103,10 +113,7 @@ public partial class DroneController : Node3D
         _curThrottle = throttle;
         _flightTime += (float)delta;
 
-        // speed-scaled FOV for the FPV "rush" (time-based smoothing: tick-rate independent)
-        float spd = _fm.Vel.Length();
-        float k = 1f - Mathf.Exp(-6f * (float)delta);
-        _cam.Fov = Mathf.Lerp(_cam.Fov, 95f + Mathf.Min(spd, 40f) * 0.9f, k);
+        // fixed FOV (typical FPV camera); no speed-scaling
 
         ApplyHud("LIVE");
     }
@@ -186,6 +193,7 @@ public partial class DroneController : Node3D
         _osd.Throttle = _curThrottle;
         _osd.TimeSec = _flightTime;
         _osd.Fov = _cam.Fov;
+        _osd.Fps = (float)Engine.GetFramesPerSecond();
         // climb angle (pitch) and roll from the drone basis, for the artificial horizon
         _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
         _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));
