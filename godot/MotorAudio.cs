@@ -3,9 +3,9 @@ using Godot;
 
 // Procedural quad-motor audio (no sound files). Four slightly detuned oscillators
 // emulate the 4 motors beating together; pitch and volume track the model's thrust
-// proxy (throttle + stick activity). Armed motors always idle, so there is a hum
-// even at zero throttle. Press S to cycle OFF -> 1..10 -> OFF; the HUD shows the
-// number + name so the best-sounding one can be picked by ear.
+// proxy (throttle + stick activity), falling to SILENCE at zero throttle. Press S
+// to cycle OFF -> 1..10 -> OFF; the HUD shows the number + name so the best-sounding
+// one can be picked by ear. (P.Idle is retained in the table but currently unused.)
 //
 // The 10 variants are two families derived from the SAW and RICH favourites:
 //   1-5  SAW*  : tonal buzz (saw waves), little/no noise
@@ -80,9 +80,9 @@ public partial class MotorAudio : AudioStreamPlayer
         }
 
         P p = Presets[Variant];
-        float e = Mathf.Max(_effort, p.Idle);          // armed idle floor -> always hums
+        float e = _effort;                              // silent at zero throttle (no idle floor)
         float baseFreq = p.FLo + e * (p.FHi - p.FLo);
-        float amp = 0.05f + e * 0.30f;
+        float amp = e * 0.34f;                          // amplitude -> 0 as throttle -> 0
 
         for (int i = 0; i < frames; i++)
         {
