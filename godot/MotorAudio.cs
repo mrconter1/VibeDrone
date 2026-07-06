@@ -43,7 +43,14 @@ public partial class MotorAudio : AudioStreamPlayer
     };
     public const int VariantCount = 10;
 
-    public int Variant { get; private set; }          // 0 = off
+    // chosen defaults (SAW-soft with light tone shaping) - also the menu's initial values
+    public const int DefaultVariant = 1;
+    public const float DefLowPassHz = 15150f;
+    public const float DefHighPassHz = 125f;
+    public const float DefDrive = 0.01f;
+    public const float DefMasterDb = -8f;
+
+    public int Variant { get; private set; } = DefaultVariant;
     public string CurrentName => Variant == 0 ? "OFF" : $"{Variant}/{VariantCount} {Presets[Variant].Name}";
 
     private const int Rate = 44100;
@@ -70,9 +77,9 @@ public partial class MotorAudio : AudioStreamPlayer
             AudioServer.AddBus(bus);
             AudioServer.SetBusName(bus, "Motor");
             AudioServer.SetBusSend(bus, "Master");
-            _lp = new AudioEffectLowPassFilter { CutoffHz = 20000f };
-            _hp = new AudioEffectHighPassFilter { CutoffHz = 20f };
-            _dist = new AudioEffectDistortion { Mode = AudioEffectDistortion.ModeEnum.Clip, Drive = 0f };
+            _lp = new AudioEffectLowPassFilter { CutoffHz = DefLowPassHz };
+            _hp = new AudioEffectHighPassFilter { CutoffHz = DefHighPassHz };
+            _dist = new AudioEffectDistortion { Mode = AudioEffectDistortion.ModeEnum.Clip, Drive = DefDrive };
             AudioServer.AddBusEffect(bus, _lp);
             AudioServer.AddBusEffect(bus, _hp);
             AudioServer.AddBusEffect(bus, _dist);
@@ -80,7 +87,7 @@ public partial class MotorAudio : AudioStreamPlayer
         Bus = "Motor";
 
         Stream = new AudioStreamGenerator { MixRate = Rate, BufferLength = 0.08f };
-        VolumeDb = -7f;
+        VolumeDb = DefMasterDb;
         Play();
         _pb = (AudioStreamGeneratorPlayback)GetStreamPlayback();
     }

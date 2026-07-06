@@ -12,6 +12,11 @@ public partial class SoundMenu : CanvasLayer
     private Panel _panel = null!;
     private bool _open;
 
+    // control refs so the Copy button can read current values
+    private OptionButton _variantSel = null!;
+    private HSlider _lp = null!, _hp = null!, _drive = null!, _vol = null!;
+    private Label _status = null!;
+
     public void Setup(MotorAudio audio) => _audio = audio;
 
     public override void _Ready()
@@ -42,23 +47,23 @@ public partial class SoundMenu : CanvasLayer
 
     private void BuildUi()
     {
-        _panel = new Panel { Position = new Vector2(40, 110), Size = new Vector2(430, 470) };
+        _panel = new Panel { Position = new Vector2(40, 90), Size = new Vector2(430, 560) };
         _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.92f);
         AddChild(_panel);
 
-        var v = new VBoxContainer { Position = new Vector2(18, 16), Size = new Vector2(394, 440) };
+        var v = new VBoxContainer { Position = new Vector2(18, 16), Size = new Vector2(394, 530) };
         v.AddThemeConstantOverride("separation", 10);
         _panel.AddChild(v);
 
         v.AddChild(new Label { Text = "SOUND TEST   (S to close)" });
 
         // --- variant selector ---
-        var variant = new OptionButton();
-        variant.AddItem("OFF", 0);
-        for (int i = 1; i <= MotorAudio.VariantCount; i++) variant.AddItem($"{i}", i);
-        variant.Selected = _audio.Variant;
-        variant.ItemSelected += idx => _audio.SetVariant((int)idx);
-        v.AddChild(LabeledRow("Variant", variant));
+        _variantSel = new OptionButton();
+        _variantSel.AddItem("OFF", 0);
+        for (int i = 1; i <= MotorAudio.VariantCount; i++) _variantSel.AddItem($"{i}", i);
+        _variantSel.Selected = _audio.Variant;
+        _variantSel.ItemSelected += idx => _audio.SetVariant((int)idx);
+        v.AddChild(LabeledRow("Variant", _variantSel));
 
         // --- throttle hold buttons ---
         v.AddChild(new Label { Text = "Hold throttle (audition level)" });
@@ -74,14 +79,35 @@ public partial class SoundMenu : CanvasLayer
         v.AddChild(row);
 
         // --- audio tools ---
-        v.AddChild(Slider("Low-pass cutoff (Hz)", 500, 20000, 20000, 50,
-            (val, lbl) => { _audio.SetLowPassHz((float)val); lbl($"{val:0} Hz"); }));
-        v.AddChild(Slider("High-pass cutoff (Hz)", 20, 2000, 20, 5,
-            (val, lbl) => { _audio.SetHighPassHz((float)val); lbl($"{val:0} Hz"); }));
-        v.AddChild(Slider("Distortion drive", 0, 1, 0, 0.01,
-            (val, lbl) => { _audio.SetDrive((float)val); lbl($"{val:0.00}"); }));
-        v.AddChild(Slider("Master volume (dB)", -40, 0, -7, 1,
-            (val, lbl) => { _audio.SetMasterDb((float)val); lbl($"{val:0} dB"); }));
+        v.AddChild(Slider("Low-pass cutoff (Hz)", 500, 20000, MotorAudio.DefLowPassHz, 50,
+            (val, lbl) => { _audio.SetLowPassHz((float)val); lbl($"{val:0} Hz"); }, out _lp));
+        v.AddChild(Slider("High-pass cutoff (Hz)", 20, 2000, MotorAudio.DefHighPassHz, 5,
+            (val, lbl) => { _audio.SetHighPassHz((float)val); lbl($"{val:0} Hz"); }, out _hp));
+        v.AddChild(Slider("Distortion drive", 0, 1, MotorAudio.DefDrive, 0.01,
+            (val, lbl) => { _audio.SetDrive((float)val); lbl($"{val:0.00}"); }, out _drive));
+        v.AddChild(Slider("Master volume (dB)", -40, 0, MotorAudio.DefMasterDb, 1,
+            (val, lbl) => { _audio.SetMasterDb((float)val); lbl($"{val:0} dB"); }, out _vol));
+
+        // --- copy settings ---
+        var copy = new Button { Text = "Copy settings to clipboard", CustomMinimumSize = new Vector2(0, 34) };
+        copy.Pressed += OnCopy;
+        v.AddChild(copy);
+        _status = new Label { Text = "" };
+        v.AddChild(_status);
+    }
+
+    private void OnCopy()
+    {
+        var c = CultureInfo.InvariantCulture;
+        string text =
+            "OpenDrone sound settings\n" +
+            $"variant   = {_audio.CurrentName}\n" +
+            string.Format(c, "lowpass   = {0:0} Hz\n", _lp.Value) +
+            string.Format(c, "highpass  = {0:0} Hz\n", _hp.Value) +
+            string.Format(c, "drive     = {0:0.00}\n", _drive.Value) +
+            string.Format(c, "master    = {0:0} dB", _vol.Value);
+        DisplayServer.ClipboardSet(text);
+        _status.Text = "Copied to clipboard - paste it to share.";
     }
 
     private static HBoxContainer LabeledRow(string label, Control control)
@@ -96,7 +122,8 @@ public partial class SoundMenu : CanvasLayer
 
     // A labelled slider; onChange gets the value and a setter to update the value readout.
     private delegate void SliderChange(double value, System.Action<string> setReadout);
-    private static VBoxContainer Slider(string name, double min, double max, double init, double step, SliderChange onChange)
+    private static VBoxContainer Slider(string name, double min, double max, double init, double step,
+                                        SliderChange onChange, out HSlider slider)
     {
         var box = new VBoxContainer();
         var head = new HBoxContainer();
@@ -113,6 +140,7 @@ public partial class SoundMenu : CanvasLayer
         s.ValueChanged += val => onChange(val, setReadout);
         box.AddChild(s);
         onChange(init, setReadout);   // initialise effect + readout
+        slider = s;
         return box;
     }
 }
