@@ -29,7 +29,7 @@ public partial class SoundMenu : CanvasLayer
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        if (ev is InputEventKey { Pressed: true, Keycode: Key.S })
+        if (ev is InputEventKey { Pressed: true, Keycode: Key.M })
         {
             Toggle();
             GetViewport().SetInputAsHandled();
@@ -41,7 +41,8 @@ public partial class SoundMenu : CanvasLayer
         _open = !_open;
         _panel.Visible = _open;
         GetTree().Paused = _open;
-        Input.MouseMode = _open ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Hidden;
+        // cursor only while the menu is open (to click); captured (hidden) otherwise
+        Input.MouseMode = _open ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
         if (_open) _audio.SetEffort(0f);   // start from silence; use the throttle buttons
     }
 
@@ -55,7 +56,7 @@ public partial class SoundMenu : CanvasLayer
         v.AddThemeConstantOverride("separation", 10);
         _panel.AddChild(v);
 
-        v.AddChild(new Label { Text = "SOUND TEST   (S to close)" });
+        v.AddChild(new Label { Text = "SOUND TEST   (M to close)" });
 
         // --- variant selector ---
         _variantSel = new OptionButton();

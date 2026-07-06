@@ -86,7 +86,7 @@ public partial class DroneController : Node3D
         AddChild(edit);
 
         if (Replay) LoadReplay();
-        Input.MouseMode = Input.MouseModeEnum.Hidden;
+        Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
         ResetDrone();
     }
 

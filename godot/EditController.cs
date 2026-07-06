@@ -7,13 +7,15 @@ using Godot;
 public partial class EditController : Node3D
 {
     [Export] public float MouseSensitivity = 0.003f;
-    [Export] public float MoveSpeed = 25f;      // m/s, adjustable with the mouse wheel
+    [Export] public float MoveSpeed = 25f;      // m/s target, adjustable with the mouse wheel
+    [Export] public float Accel = 7f;           // lower = floatier (slower to reach speed / coast to stop)
 
     private Camera3D _cam = null!;
     private Camera3D _droneCam = null!;          // restored as current when leaving edit mode
     private Label _hint = null!;
     private bool _active;
     private float _yaw, _pitch;
+    private Vector3 _vel;                        // carried momentum, for Minecraft-style float
 
     public void Setup(Camera3D droneCam) => _droneCam = droneCam;
 
@@ -72,12 +74,13 @@ public partial class EditController : Node3D
             _yaw = e.Y; _pitch = Mathf.Clamp(e.X, -1.55f, 1.55f);
             _cam.Rotation = new Vector3(_pitch, _yaw, 0f);
             _cam.Current = true;
+            _vel = Vector3.Zero;
             Input.MouseMode = Input.MouseModeEnum.Captured;
         }
         else
         {
             _droneCam.Current = true;
-            Input.MouseMode = Input.MouseModeEnum.Hidden;
+            Input.MouseMode = Input.MouseModeEnum.Captured;   // keep the cursor hidden
         }
     }
 
@@ -92,7 +95,10 @@ public partial class EditController : Node3D
         if (Input.IsKeyPressed(Key.D)) dir += b.X;
         if (Input.IsKeyPressed(Key.Space)) dir += Vector3.Up;
         if (Input.IsKeyPressed(Key.Shift)) dir += Vector3.Down;
-        if (dir != Vector3.Zero)
-            _cam.GlobalPosition += dir.Normalized() * MoveSpeed * (float)delta;
+
+        // ease velocity toward the target (or toward 0 when keys released) -> floaty, no instant stop
+        Vector3 target = dir == Vector3.Zero ? Vector3.Zero : dir.Normalized() * MoveSpeed;
+        _vel = _vel.Lerp(target, 1f - Mathf.Exp(-Accel * (float)delta));
+        _cam.GlobalPosition += _vel * (float)delta;
     }
 }
