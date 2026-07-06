@@ -145,9 +145,23 @@ public partial class LapRecorder : Node3D
             Ranks += $"{i + 1}.  {_bestLaps[i]:00.00}\n";
     }
 
-    // --- persistence ---
-    private const string GhostPath = "user://ghost.json";
-    private const string LapsPath = "user://laptimes.json";
+    // --- persistence (per track, keyed by index, so records never mix between tracks) ---
+    private int _track;
+    private string GhostPath => $"user://ghost_{_track}.json";
+    private string LapsPath => $"user://laptimes_{_track}.json";
+
+    // Switch to another track's records: drop the in-memory ghost/laps and reload that track's.
+    public void SetTrack(int index)
+    {
+        _track = index;
+        _bestLaps.Clear();
+        _bestGhost = new List<Sample>();
+        Ranks = "";
+        LastLap = 0f;
+        HideGhost();
+        LoadLaps();
+        LoadGhost();
+    }
 
     private void SaveGhost()
     {

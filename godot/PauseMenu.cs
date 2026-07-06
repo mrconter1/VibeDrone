@@ -40,17 +40,20 @@ public partial class PauseMenu : CanvasLayer
     private void BuildUi()
     {
         Vector2I win = DisplayServer.WindowGetSize();
-        _panel = new Panel { Size = new Vector2(300, 434), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 217) };
+        _panel = new Panel { Size = new Vector2(300, 488), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 244) };
         _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.94f);
         AddChild(_panel);
 
-        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 386) };
+        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 440) };
         v.AddThemeConstantOverride("separation", 14);
         _panel.AddChild(v);
 
         v.AddChild(new Label { Text = "PAUSED" });
 
         AddButton(v, "Resume", () => SetOpen(false));
+
+        Button trackBtn = null!;
+        trackBtn = AddButton(v, TrackLabel(), () => { _ctrl.CycleTrack(); trackBtn.Text = TrackLabel(); });
 
         _debugBtn = AddButton(v, DebugLabel(), () =>
         {
@@ -69,6 +72,7 @@ public partial class PauseMenu : CanvasLayer
     }
 
     private string DebugLabel() => "Debug overlay: " + (_ctrl.ShowDebug ? "ON" : "OFF");
+    private string TrackLabel() => $"Track: {_ctrl.TrackName}  ▶";
 
     private static Button AddButton(Control parent, string text, System.Action onPressed)
     {

@@ -7,17 +7,33 @@ using Godot;
 // persist to user://gates.json (saved on edit, loaded on launch).
 public partial class Arena : Node3D
 {
-    private const string SavePath = "user://gates.json";
     private readonly List<Node3D> _gates = new();
     private readonly List<Area3D> _triggers = new();
+    private Vector2[] _layout = System.Array.Empty<Vector2>();   // current track's gate positions
 
+    public int TrackIndex { get; private set; }
+    public string TrackName => TrackLibrary.Name(TrackIndex);
     public IReadOnlyList<Node3D> Gates => _gates;
     public IReadOnlyList<Area3D> GateTriggers => _triggers;
     public Transform3D StartTransform => _gates[0].GlobalTransform;   // gate 0 = start/finish
 
+    private string SavePath => $"user://gates_{TrackIndex}.json";
+
     public override void _Ready()
     {
         BuildWorld();
+        LoadTrack(0);
+    }
+
+    // Tear down the current gates and build the given track (wrapping the index), applying any
+    // saved layout for it. The world (sky/ground/light) is built once and kept.
+    public void LoadTrack(int index)
+    {
+        TrackIndex = TrackLibrary.Wrap(index);
+        _layout = TrackLibrary.Gates(TrackIndex);
+        foreach (Node3D g in _gates) g.QueueFree();
+        _gates.Clear();
+        _triggers.Clear();
         BuildGates();
         LoadLayout();
     }
@@ -68,24 +84,17 @@ public partial class Arena : Node3D
         AddChild(ground);
     }
 
-    // A looped track. Gate 0 is the black/white START-FINISH gate (spawn inside it); gates
-    // 1..5 are the numbered green/red gates. Each is yaw-oriented along the track.
-    private static readonly Vector2[] Track =
-    {
-        new(0, 20), new(28, 52), new(16, 92), new(-26, 88), new(-32, 48), new(-12, 22),
-    };
-
     private void BuildGates()
     {
         var green = GateMaterial(new Color(0.10f, 1.0f, 0.30f));
         var red = GateMaterial(new Color(1.0f, 0.15f, 0.20f));
-        for (int i = 0; i < Track.Length; i++)
+        for (int i = 0; i < _layout.Length; i++)
         {
             Vector2 fwd = TrackDir(i);                    // travel direction at this gate (loops)
             float yaw = Mathf.Atan2(fwd.X, fwd.Y);        // align the gate's Z with travel
             var gate = new Node3D
             {
-                Position = new Vector3(Track[i].X, 8f, Track[i].Y),
+                Position = new Vector3(_layout[i].X, 8f, _layout[i].Y),
                 Rotation = new Vector3(0f, yaw, 0f),
             };
             gate.AddChild(SquareFrame(green, -0.18f));     // fly THROUGH the green side
@@ -131,8 +140,8 @@ public partial class Arena : Node3D
     }
 
     // Travel direction at gate i, wrapping (it is a loop).
-    private static Vector2 TrackDir(int i) =>
-        (Track[(i + 1) % Track.Length] - Track[i]).Normalized();
+    private Vector2 TrackDir(int i) =>
+        (_layout[(i + 1) % _layout.Length] - _layout[i]).Normalized();
 
     private static Transform3D DictXform(Godot.Collections.Dictionary d) =>
         new(new Basis(Persistence.ReadRot(d)), Persistence.ReadPos(d));

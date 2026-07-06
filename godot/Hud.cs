@@ -10,7 +10,7 @@ public partial class Hud : Control
     public bool ShowDebug;
 
     public float LapTime, LastLap, BestLap;
-    public string RaceStatus = "", Ranks = "";
+    public string RaceStatus = "", Ranks = "", Track = "";
 
     private Font _font = null!;
 
@@ -57,7 +57,9 @@ public partial class Hud : Control
         if (BestLap > 0f)
             DrawString(_font, new Vector2(cx, 98), $"BEST {FmtTime(BestLap)}", HorizontalAlignment.Center, 132, 17, gold);
 
-        // best-laps board (top right)
+        // track name + best-laps board (top right)
+        if (Track.Length > 0)
+            DrawString(_font, new Vector2(sz.X - 196, 24), Track, HorizontalAlignment.Left, -1, 15, gold);
         if (Ranks.Length > 0)
         {
             DrawString(_font, new Vector2(sz.X - 196, 44), "BEST LAPS", HorizontalAlignment.Left, -1, 17, hud);

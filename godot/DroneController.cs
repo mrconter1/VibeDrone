@@ -103,12 +103,7 @@ public partial class DroneController : Node3D
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
-        // race gate pass-through triggers (gate 0 = start/finish, 1..n-1 = regular in order)
-        for (int i = 0; i < _arena.GateTriggers.Count; i++)
-        {
-            int idx = i;
-            _arena.GateTriggers[i].BodyEntered += body => OnGatePassed(idx, body);
-        }
+        WireGates();
 
         Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
         StartRace();   // begin in fly mode, held fixed at the start line, engine off
@@ -293,6 +288,29 @@ public partial class DroneController : Node3D
         _drone.ResetPhysicsInterpolation();   // teleport: don't sweep from the old pose
     }
 
+    // (Re)connect each gate's pass-through trigger. Called on launch and after a track rebuild,
+    // since LoadTrack frees the old gates (and their signals) and creates fresh ones.
+    private void WireGates()
+    {
+        for (int i = 0; i < _arena.GateTriggers.Count; i++)
+        {
+            int idx = i;
+            _arena.GateTriggers[i].BodyEntered += body => OnGatePassed(idx, body);
+        }
+    }
+
+    public string TrackName => _arena.TrackName;
+    public void CycleTrack() => SetTrack(_arena.TrackIndex + 1);   // pause-menu picker
+
+    // Rebuild the arena for another track, re-wire its gates, load that track's records, restart.
+    private void SetTrack(int index)
+    {
+        _arena.LoadTrack(index);
+        WireGates();
+        _recorder.SetTrack(_arena.TrackIndex);
+        StartRace();
+    }
+
     private void StartRace()
     {
         ResetDrone();          // spawn fixed in the start/finish gate
@@ -372,6 +390,7 @@ public partial class DroneController : Node3D
         _osd.LastLap = _recorder.LastLap;
         _osd.BestLap = _recorder.BestLap;
         _osd.Ranks = _recorder.Ranks;
+        _osd.Track = _arena.TrackName;
         // rebuild the status string only when it changes (avoids a per-tick string alloc)
         int key = _raceArmed ? -1 : _raceRunning ? _gatePassed : -2;
         if (key != _statusKey)
