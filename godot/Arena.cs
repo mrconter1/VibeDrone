@@ -52,7 +52,13 @@ public partial class Arena : Node3D
                 TonemapMode = Godot.Environment.ToneMapper.Aces,
                 // SSAO off: costly on an integrated GPU and adds nothing on a flat grid scene
                 SsaoEnabled = false,
-                GlowEnabled = false,  // off: bloom was washing the green gates toward yellow
+                // glow back on but with a high HDR threshold, so only the very bright ghost/trail
+                // (emission energy ~4) bloom - the gates (energy ~1) stay crisp, not washed yellow
+                GlowEnabled = true,
+                GlowHdrThreshold = 1.5f,
+                GlowIntensity = 0.9f,
+                GlowStrength = 1.1f,
+                GlowBloom = 0.05f,
             },
         });
 

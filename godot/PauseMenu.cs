@@ -40,11 +40,11 @@ public partial class PauseMenu : CanvasLayer
     private void BuildUi()
     {
         Vector2I win = DisplayServer.WindowGetSize();
-        _panel = new Panel { Size = new Vector2(300, 320), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 160) };
+        _panel = new Panel { Size = new Vector2(300, 380), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 190) };
         _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.94f);
         AddChild(_panel);
 
-        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 272) };
+        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 332) };
         v.AddThemeConstantOverride("separation", 14);
         _panel.AddChild(v);
 
@@ -59,6 +59,9 @@ public partial class PauseMenu : CanvasLayer
         });
 
         AddButton(v, "Sound settings", () => { SetOpen(false); _sound.SetOpen(true); });
+
+        Button clearBtn = null!;
+        clearBtn = AddButton(v, "Clear results", () => { _ctrl.ClearResults(); clearBtn.Text = "Cleared!"; });
 
         AddButton(v, "Exit game", () => GetTree().Quit());
     }
