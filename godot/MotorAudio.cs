@@ -54,8 +54,31 @@ public partial class MotorAudio : AudioStreamPlayer
     private float _effortTarget;
     private readonly Random _rng = new(1234);
 
+    // shaping effects on a dedicated bus (driven by the sound menu)
+    private AudioEffectLowPassFilter _lp = null!;
+    private AudioEffectHighPassFilter _hp = null!;
+    private AudioEffectDistortion _dist = null!;
+
     public override void _Ready()
     {
+        ProcessMode = ProcessModeEnum.Always;   // keep sounding while the game is paused (menu open)
+
+        int bus = AudioServer.GetBusIndex("Motor");
+        if (bus == -1)
+        {
+            bus = AudioServer.BusCount;
+            AudioServer.AddBus(bus);
+            AudioServer.SetBusName(bus, "Motor");
+            AudioServer.SetBusSend(bus, "Master");
+            _lp = new AudioEffectLowPassFilter { CutoffHz = 20000f };
+            _hp = new AudioEffectHighPassFilter { CutoffHz = 20f };
+            _dist = new AudioEffectDistortion { Mode = AudioEffectDistortion.ModeEnum.Clip, Drive = 0f };
+            AudioServer.AddBusEffect(bus, _lp);
+            AudioServer.AddBusEffect(bus, _hp);
+            AudioServer.AddBusEffect(bus, _dist);
+        }
+        Bus = "Motor";
+
         Stream = new AudioStreamGenerator { MixRate = Rate, BufferLength = 0.08f };
         VolumeDb = -7f;
         Play();
@@ -63,7 +86,14 @@ public partial class MotorAudio : AudioStreamPlayer
     }
 
     public void Cycle() => Variant = (Variant + 1) % (VariantCount + 1);
+    public void SetVariant(int v) => Variant = Mathf.Clamp(v, 0, VariantCount);
     public void SetEffort(float e) => _effortTarget = Mathf.Clamp(e, 0f, 1f);
+
+    // sound-menu audio tools
+    public void SetLowPassHz(float hz) => _lp.CutoffHz = hz;
+    public void SetHighPassHz(float hz) => _hp.CutoffHz = hz;
+    public void SetDrive(float d) => _dist.Drive = Mathf.Clamp(d, 0f, 1f);
+    public void SetMasterDb(float db) => VolumeDb = db;
 
     public override void _Process(double delta)
     {

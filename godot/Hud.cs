@@ -59,7 +59,7 @@ public partial class Hud : Control
 
         // top bar
         Text(40, 50, $"[{Mode}]   {TimeSec,5:0.0}s   FOV {Fov:0}   {Fps:0} FPS   SND {Sound}", 22, hudCol);
-        Text(40, 78, "Esc quit   R reset   Tab replay   S sound", 16, dim);
+        Text(40, 78, "Esc quit   R reset   Tab replay   S sound menu", 16, dim);
     }
 
     private void Text(float x, float y, string s, int size, Color col)

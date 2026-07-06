@@ -83,6 +83,10 @@ public partial class DroneController : Node3D
         _audio = new MotorAudio();
         AddChild(_audio);
 
+        var menu = new SoundMenu();
+        menu.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
+        AddChild(menu);       // S opens/closes it and pauses the game
+
         if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Hidden;
         ResetDrone();
@@ -153,7 +157,7 @@ public partial class DroneController : Node3D
             if (k.Keycode == Key.Escape) GetTree().Quit();
             else if (k.Keycode == Key.R) { _log?.StoreLine(string.Format(CultureInfo.InvariantCulture, "# reset at {0:0.0}s", _sessionTime)); ResetDrone(); }
             else if (k.Keycode == Key.Tab) { Replay = !Replay; if (Replay && _rt.Count == 0) LoadReplay(); _replayT = 0; ResetDrone(); }
-            else if (k.Keycode == Key.S) _audio.Cycle();   // cycle motor-sound variant (OFF -> SINE -> SAW -> PULSE -> RICH -> OFF)
+            // S opens the sound menu (handled by SoundMenu, which also pauses the game)
         }
     }
 
