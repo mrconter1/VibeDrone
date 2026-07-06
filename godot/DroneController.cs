@@ -31,9 +31,6 @@ public partial class DroneController : Node3D
     private Camera3D _cam = null!;
     private Hud _osd = null!;
     private MotorAudio _audio = null!;
-    // thrust proxy at rest (zero throttle, level) .. full throttle, for effort normalisation
-    private const float ProxyIdle = 0.126f;
-    private const float ProxyMax = 3.85f;
     private float _kThrottle;
     private float _flightTime;
     private float _curThrottle;
@@ -193,9 +190,10 @@ public partial class DroneController : Node3D
         _curThrottle = throttle;
         _flightTime += (float)delta;
 
-        // drive motor audio by how hard the motors are working (thrust proxy = throttle +
-        // stick activity), zeroed at rest so there is no sound at zero throttle
-        _audio.SetEffort((_fm.ThrustProxy(roll, pitch, yaw, throttle) - ProxyIdle) / (ProxyMax - ProxyIdle));
+        // drive motor audio from throttle AND stick activity, so rolls/pitches/yaws audibly
+        // rev the motors (the thrust proxy saturates and would hide that). Silent at rest.
+        float stick = Mathf.Min(1f, (Mathf.Abs(roll) + Mathf.Abs(pitch) + Mathf.Abs(yaw)) / 2f);
+        _audio.SetEffort(Mathf.Clamp(throttle * 0.9f + stick * 0.5f, 0f, 1f));
 
         // fixed FOV (typical FPV camera); no speed-scaling
 
