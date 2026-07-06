@@ -8,7 +8,7 @@ public partial class Hud : Control
     public string Mode = "LIVE";
     public string Joypad = "";
 
-    private Font _font;
+    private Font _font = null!;   // set in _Ready
 
     public override void _Ready()
     {
@@ -17,7 +17,14 @@ public partial class Hud : Control
         SetAnchorsPreset(LayoutPreset.FullRect);
     }
 
-    public override void _Process(double delta) => QueueRedraw();
+    // Redraw ~30 Hz, not every frame: the HUD rebuilds several strings each _Draw,
+    // and doing that 60x/s adds managed-GC pressure that can cost a vsync frame.
+    private double _redrawAccum;
+    public override void _Process(double delta)
+    {
+        _redrawAccum += delta;
+        if (_redrawAccum >= 1.0 / 30.0) { _redrawAccum = 0; QueueRedraw(); }
+    }
 
     public override void _Draw()
     {

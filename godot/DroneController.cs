@@ -26,16 +26,16 @@ public partial class DroneController : Node3D
     [Export] public string ReplayFile = "res://replay.csv";
 
     private readonly FlightModel _fm = new();
-    private Node3D _drone;
-    private Camera3D _cam;
-    private Hud _osd;
+    private Node3D _drone = null!;      // set in _Ready
+    private Camera3D _cam = null!;
+    private Hud _osd = null!;
     private float _kThrottle;
     private float _flightTime;
     private float _curThrottle;
     private readonly float[] _axes = new float[16];
 
     // per-session performance log (truncated fresh each launch)
-    private Godot.FileAccess _log;
+    private Godot.FileAccess _log = null!;   // set in _Ready (OpenLog); null-checked everywhere
     private double _sessionTime;      // seconds since launch
     private double _logElapsed;       // seconds since last log line
     private int _logFrames;           // rendered frames in the current 1s window
@@ -291,8 +291,9 @@ public partial class DroneController : Node3D
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
             AmbientLightEnergy = 0.6f,
             TonemapMode = Godot.Environment.ToneMapper.Aces,
-            SsaoEnabled = true,
-            GlowEnabled = true,   // makes emissive gates pop
+            // SSAO off: costly on an integrated GPU and adds nothing on a flat grid scene
+            SsaoEnabled = false,
+            GlowEnabled = true,   // makes emissive gates pop (cheap enough, keep)
         };
         AddChild(env);
 
