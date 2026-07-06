@@ -6,6 +6,10 @@
     powershell -ExecutionPolicy Bypass -File StartGame.ps1
     powershell -ExecutionPolicy Bypass -File StartGame.ps1 -Editor   # open the editor instead
     powershell -ExecutionPolicy Bypass -File StartGame.ps1 -NoBuild  # skip the C# build
+
+.NOTES
+    If Godot crashes at startup (the AMD Radeon 740M iGPU can segfault inside the
+    Vulkan driver), the script automatically retries once on the D3D12 backend.
 #>
 [CmdletBinding()]
 param(
@@ -49,4 +53,11 @@ if ($Editor) {
 } else {
     Write-Host "Launching game (Esc quit, R reset, Tab replay) ..." -ForegroundColor Green
     & $Godot --path $GodotDir
+    # The AMD Radeon 740M iGPU occasionally segfaults (signal 11) inside the Vulkan
+    # driver at startup. That is a native driver crash, not a game bug - retry once on
+    # the D3D12 backend, which sidesteps the AMD Vulkan path entirely.
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Godot exited with code $LASTEXITCODE (likely a Vulkan driver crash) - retrying on D3D12 ..." -ForegroundColor Yellow
+        & $Godot --rendering-driver d3d12 --path $GodotDir
+    }
 }
