@@ -1,38 +1,21 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# captured data
-logs/
-*.csv
-
-# .NET / the tooling build
-mod/bin/
-mod/obj/
-*.user
-
-# machine-specific resolved path written by install.ps1
-scripts/gamedir.txt
-
 # Godot
 godot/.godot/
 godot/.mono/
 godot/bin/
 godot/obj/
 godot/*.sln
-
-# C# validation harness build output
-validate-cs/bin/
-validate-cs/obj/
-
-# Godot session perf log
-*.log
-
-# exported release build
-build/
+*.user
 
 # Godot import artifacts from replay.csv misdetection
 godot/*.translation
 godot/replay.csv.import
+
+# captured flight logs / analysis output (not part of the game)
+logs/
+*.csv
+
+# session perf log
+*.log
+
+# exported release build
+build/

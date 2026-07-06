@@ -3,9 +3,8 @@ using Godot;
 
 // Procedural quad-motor audio (no sound files). Four slightly detuned oscillators
 // emulate the 4 motors beating together; pitch and volume track the model's thrust
-// proxy (throttle + stick activity), falling to SILENCE at zero throttle. Press S
-// to cycle OFF -> 1..10 -> OFF; the HUD shows the number + name so the best-sounding
-// one can be picked by ear. (P.Idle is retained in the table but currently unused.)
+// proxy (throttle + stick activity), falling to SILENCE at zero throttle. The sound
+// menu (S) selects a variant and shapes tone; variant 0 = off.
 //
 // The 10 variants are two families derived from the SAW and RICH favourites:
 //   1-5  SAW*  : tonal buzz (saw waves), little/no noise
@@ -21,25 +20,24 @@ public partial class MotorAudio : AudioStreamPlayer
         public float WhineAmt;      // added sine "whine" weight
         public int WhineMult;       // whine harmonic (x fundamental)
         public float Noise;         // prop/air noise amount
-        public float Idle;          // idle effort floor (armed hum)
-        public P(string n, float lo, float hi, float det, float saw, float wa, int wm, float nz, float idle)
-        { Name = n; FLo = lo; FHi = hi; Detune = det; Saw = saw; WhineAmt = wa; WhineMult = wm; Noise = nz; Idle = idle; }
+        public P(string n, float lo, float hi, float det, float saw, float wa, int wm, float nz)
+        { Name = n; FLo = lo; FHi = hi; Detune = det; Saw = saw; WhineAmt = wa; WhineMult = wm; Noise = nz; }
     }
 
     // index 0 unused (OFF); 1..10 are the variants
     private static readonly P[] Presets =
     {
         default,
-        new P("SAW-soft",    65, 320, 0.006f, 1.00f, 0.00f, 3, 0.00f, 0.10f),
-        new P("SAW-mid",     75, 360, 0.010f, 1.00f, 0.10f, 2, 0.00f, 0.10f),
-        new P("SAW-hi",      95, 430, 0.008f, 1.00f, 0.15f, 2, 0.02f, 0.10f),
-        new P("SAW-fat",     60, 300, 0.016f, 1.00f, 0.00f, 3, 0.02f, 0.12f),
-        new P("SAW-aggr",    80, 380, 0.012f, 1.00f, 0.20f, 4, 0.05f, 0.10f),
-        new P("RICH-soft",   70, 320, 0.010f, 0.70f, 0.25f, 3, 0.06f, 0.12f),
-        new P("RICH-mid",    75, 350, 0.013f, 0.70f, 0.30f, 3, 0.12f, 0.12f),
-        new P("RICH-hi",     95, 420, 0.011f, 0.65f, 0.35f, 4, 0.10f, 0.12f),
-        new P("RICH-grit",   70, 340, 0.015f, 0.60f, 0.30f, 3, 0.22f, 0.13f),
-        new P("RICH-turbine",85, 400, 0.012f, 0.50f, 0.45f, 2, 0.15f, 0.13f),
+        new P("SAW-soft",    65, 320, 0.006f, 1.00f, 0.00f, 3, 0.00f),
+        new P("SAW-mid",     75, 360, 0.010f, 1.00f, 0.10f, 2, 0.00f),
+        new P("SAW-hi",      95, 430, 0.008f, 1.00f, 0.15f, 2, 0.02f),
+        new P("SAW-fat",     60, 300, 0.016f, 1.00f, 0.00f, 3, 0.02f),
+        new P("SAW-aggr",    80, 380, 0.012f, 1.00f, 0.20f, 4, 0.05f),
+        new P("RICH-soft",   70, 320, 0.010f, 0.70f, 0.25f, 3, 0.06f),
+        new P("RICH-mid",    75, 350, 0.013f, 0.70f, 0.30f, 3, 0.12f),
+        new P("RICH-hi",     95, 420, 0.011f, 0.65f, 0.35f, 4, 0.10f),
+        new P("RICH-grit",   70, 340, 0.015f, 0.60f, 0.30f, 3, 0.22f),
+        new P("RICH-turbine",85, 400, 0.012f, 0.50f, 0.45f, 2, 0.15f),
     };
     public const int VariantCount = 10;
 

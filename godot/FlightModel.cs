@@ -5,7 +5,7 @@ namespace OpenDrone
 {
     // Engine-agnostic drone flight model fitted from the reference sim flight logs.
     // Pure C# + System.Numerics, no Godot/Unity types -> drop into anything.
-    // Port of python/the model module. Coordinates: Y up, body +Z forward, +X right.
+    // Coordinates: Y up, body +Z forward, +X right.
     public sealed class FlightModel
     {
         // --- fitted parameters (the parameter set, clean aligned capture a capture run,
@@ -32,7 +32,7 @@ namespace OpenDrone
         public float DragLatKd = 0.0489f;    // lateral linear drag
         public float DragLatKq = 0.0215f;    // lateral quadratic drag
         public float Tau = 0.005f;           // motor spool-up time constant (s)
-        public float TauRate = 0.002f;       // angular-rate response lag (s); ~0, kept for parity with the Python model
+        public float TauRate = 0.002f;       // angular-rate response lag (s); fitted ~0 (negligible)
 
         // --- state ---
         public Vector3 Pos;
