@@ -68,6 +68,7 @@ public partial class Arena : Node3D
             var gate = new Node3D { Position = new Vector3(p.X, 8f, p.Y) };
             gate.AddChild(SquareFrame(green, -0.18f));   // fly THROUGH the green side
             gate.AddChild(SquareFrame(red, 0.18f));      // red = wrong side
+            gate.AddToGroup("movable");                  // edit mode can grab it
             AddChild(gate);
         }
     }
