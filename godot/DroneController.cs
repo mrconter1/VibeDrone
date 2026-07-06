@@ -64,6 +64,9 @@ public partial class DroneController : Node3D
     private DroneModel _ghost = null!;
     private MeshInstance3D _trail = null!;
     private ImmediateMesh _trailMesh = null!;
+    private readonly List<Vector3> _trailPts = new();   // reused each frame (no per-frame alloc)
+    private readonly List<float> _trailAge = new();
+    private PlaybackController _playback = null!;
 
     // replay data
     private readonly List<float> _rt = new();
@@ -102,6 +105,10 @@ public partial class DroneController : Node3D
         var menu = new SoundMenu();
         menu.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
         AddChild(menu);       // M opens/closes it and pauses the game
+
+        _playback = new PlaybackController();
+        _playback.Setup(this, _cam);
+        AddChild(_playback);
 
         var pause = new PauseMenu();
         pause.Setup(this, menu);
@@ -402,32 +409,56 @@ public partial class DroneController : Node3D
         BuildTrail();
     }
 
-    // A fading ribbon along the ghost's recent path (~1 s behind it).
+    // A fading ribbon along the ghost's recent path (~1.2 s behind it). Both ends are
+    // interpolated to the exact time, so the ribbon grows/recedes smoothly instead of
+    // popping a whole sample at a time.
     private void BuildTrail()
     {
         _trailMesh.ClearSurfaces();
         const float window = 1.2f, halfW = 0.35f;
-        int end = Mathf.Min(_ghostIdx + 1, _bestGhost.Count - 1);
-        int start = end;
-        while (start > 0 && _bestGhost[start].T > _lapTime - window) start--;
-        if (end - start < 1) { _trail.Visible = false; return; }
+        if (_bestGhost.Count < 2) { _trail.Visible = false; return; }
+
+        float tailT = Mathf.Max(_lapTime - window, _bestGhost[0].T);
+        if (_lapTime - tailT < 0.05f) { _trail.Visible = false; return; }
+
+        // ordered point list, oldest -> newest: interpolated tail, real samples between, head at now
+        _trailPts.Clear();
+        _trailAge.Clear();
+        _trailPts.Add(SamplePos(tailT)); _trailAge.Add(1f);
+        for (int i = 0; i < _bestGhost.Count; i++)
+        {
+            float t = _bestGhost[i].T;
+            if (t > tailT && t < _lapTime) { _trailPts.Add(_bestGhost[i].Pos); _trailAge.Add((_lapTime - t) / window); }
+        }
+        _trailPts.Add(SamplePos(_lapTime)); _trailAge.Add(0f);
+
         _trail.Visible = true;
         _trailMesh.SurfaceBegin(Mesh.PrimitiveType.TriangleStrip);
-        for (int i = start; i <= end; i++)
+        int last = _trailPts.Count - 1;
+        for (int i = 0; i <= last; i++)
         {
-            Vector3 p = _bestGhost[i].Pos;
-            Vector3 dir = _bestGhost[Mathf.Min(i + 1, end)].Pos - _bestGhost[Mathf.Max(i - 1, start)].Pos;
+            Vector3 dir = _trailPts[Mathf.Min(i + 1, last)] - _trailPts[Mathf.Max(i - 1, 0)];
             Vector3 side = dir.LengthSquared() > 1e-6f ? dir.Normalized().Cross(Vector3.Up) : Vector3.Right;
             if (side.LengthSquared() < 1e-6f) side = Vector3.Right;
             side = side.Normalized() * halfW;
-            float age = Mathf.Clamp((_lapTime - _bestGhost[i].T) / window, 0f, 1f);
-            var col = new Color(0.4f, 0.95f, 1f, 1f - age);   // fade toward the tail
+            float a = 1f - _trailAge[i];
+            var col = new Color(0.4f, 0.95f, 1f, a * a);   // fade toward the tail (eased)
             _trailMesh.SurfaceSetColor(col);
-            _trailMesh.SurfaceAddVertex(p - side);
+            _trailMesh.SurfaceAddVertex(_trailPts[i] - side);
             _trailMesh.SurfaceSetColor(col);
-            _trailMesh.SurfaceAddVertex(p + side);
+            _trailMesh.SurfaceAddVertex(_trailPts[i] + side);
         }
         _trailMesh.SurfaceEnd();
+    }
+
+    // Interpolated ghost position at time t along the best-lap recording.
+    private Vector3 SamplePos(float t)
+    {
+        int i = 0;
+        while (i < _bestGhost.Count - 2 && _bestGhost[i + 1].T < t) i++;
+        Sample a = _bestGhost[i], b = _bestGhost[i + 1];
+        float u = Mathf.Clamp((t - a.T) / Mathf.Max(b.T - a.T, 1e-4f), 0f, 1f);
+        return a.Pos.Lerp(b.Pos, u);
     }
 
     private void SaveGhost()
@@ -500,6 +531,22 @@ public partial class DroneController : Node3D
 
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
+
+    // --- best-lap access for the playback theatre ---
+    public bool HasBestLap => _bestGhost.Count >= 2;
+    public float BestLapDuration => _bestGhost.Count > 0 ? _bestGhost[^1].T : 0f;
+
+    public void SampleBestLap(float t, out Vector3 pos, out Quaternion rot)
+    {
+        int i = 0;
+        while (i < _bestGhost.Count - 2 && _bestGhost[i + 1].T < t) i++;
+        Sample a = _bestGhost[i], b = _bestGhost[i + 1];
+        float u = Mathf.Clamp((t - a.T) / Mathf.Max(b.T - a.T, 1e-4f), 0f, 1f);
+        pos = a.Pos.Lerp(b.Pos, u);
+        rot = a.Rot.Slerp(b.Rot, u);
+    }
+
+    public void StartPlayback() => _playback.Start();
 
     // Wipe saved best laps + ghost (from the Esc menu), so a fresh best records a new ghost.
     public void ClearResults()

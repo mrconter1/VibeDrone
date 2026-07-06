@@ -40,11 +40,11 @@ public partial class PauseMenu : CanvasLayer
     private void BuildUi()
     {
         Vector2I win = DisplayServer.WindowGetSize();
-        _panel = new Panel { Size = new Vector2(300, 380), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 190) };
+        _panel = new Panel { Size = new Vector2(300, 434), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 217) };
         _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.94f);
         AddChild(_panel);
 
-        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 332) };
+        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 386) };
         v.AddThemeConstantOverride("separation", 14);
         _panel.AddChild(v);
 
@@ -57,6 +57,8 @@ public partial class PauseMenu : CanvasLayer
             _ctrl.SetShowDebug(!_ctrl.ShowDebug);
             _debugBtn.Text = DebugLabel();
         });
+
+        AddButton(v, "Playback best lap", () => { SetOpen(false); _ctrl.StartPlayback(); });
 
         AddButton(v, "Sound settings", () => { SetOpen(false); _sound.SetOpen(true); });
 
