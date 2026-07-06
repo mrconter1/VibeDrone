@@ -66,6 +66,7 @@ public partial class DroneController : Node3D
     private ImmediateMesh _trailMesh = null!;
     private readonly List<Vector3> _trailPts = new();   // reused each frame (no per-frame alloc)
     private readonly List<float> _trailAge = new();
+    private readonly List<Vector3> _trailRight = new(); // drone right-axis at each point (ribbon roll)
     private PlaybackController _playback = null!;
 
     // replay data
@@ -421,44 +422,48 @@ public partial class DroneController : Node3D
         float tailT = Mathf.Max(_lapTime - window, _bestGhost[0].T);
         if (_lapTime - tailT < 0.05f) { _trail.Visible = false; return; }
 
-        // ordered point list, oldest -> newest: interpolated tail, real samples between, head at now
+        // ordered point list, oldest -> newest: interpolated tail, real samples between, head at now.
+        // side vector = drone's right axis (from rotation) so the ribbon rolls with the drone.
         _trailPts.Clear();
         _trailAge.Clear();
-        _trailPts.Add(SamplePos(tailT)); _trailAge.Add(1f);
+        _trailRight.Clear();
+        SampleBestLap(tailT, out Vector3 tp, out Quaternion tr);
+        _trailPts.Add(tp); _trailAge.Add(1f); _trailRight.Add(new Basis(tr).X);
         for (int i = 0; i < _bestGhost.Count; i++)
         {
             float t = _bestGhost[i].T;
-            if (t > tailT && t < _lapTime) { _trailPts.Add(_bestGhost[i].Pos); _trailAge.Add((_lapTime - t) / window); }
+            if (t > tailT && t < _lapTime)
+            {
+                _trailPts.Add(_bestGhost[i].Pos);
+                _trailAge.Add((_lapTime - t) / window);
+                _trailRight.Add(new Basis(_bestGhost[i].Rot).X);
+            }
         }
-        _trailPts.Add(SamplePos(_lapTime)); _trailAge.Add(0f);
+        SampleBestLap(_lapTime, out Vector3 hp, out Quaternion hr);
+        _trailPts.Add(hp); _trailAge.Add(0f); _trailRight.Add(new Basis(hr).X);
 
+        EmitTrail(halfW);
+    }
+
+    // Build the ribbon from _trailPts/_trailAge/_trailRight: rolls with the drone, tapers to the tail.
+    private void EmitTrail(float halfW)
+    {
         _trail.Visible = true;
         _trailMesh.SurfaceBegin(Mesh.PrimitiveType.TriangleStrip);
         int last = _trailPts.Count - 1;
         for (int i = 0; i <= last; i++)
         {
-            Vector3 dir = _trailPts[Mathf.Min(i + 1, last)] - _trailPts[Mathf.Max(i - 1, 0)];
-            Vector3 side = dir.LengthSquared() > 1e-6f ? dir.Normalized().Cross(Vector3.Up) : Vector3.Right;
-            if (side.LengthSquared() < 1e-6f) side = Vector3.Right;
-            side = side.Normalized() * halfW;
+            Vector3 r = _trailRight[i];
+            Vector3 side = r.LengthSquared() > 1e-6f ? r.Normalized() : Vector3.Right;
+            side *= halfW * (1f - _trailAge[i]);   // taper: full at the drone, point at the tail
             float a = 1f - _trailAge[i];
-            var col = new Color(0.4f, 0.95f, 1f, a * a);   // fade toward the tail (eased)
+            var col = new Color(0.4f, 0.95f, 1f, a * a);
             _trailMesh.SurfaceSetColor(col);
             _trailMesh.SurfaceAddVertex(_trailPts[i] - side);
             _trailMesh.SurfaceSetColor(col);
             _trailMesh.SurfaceAddVertex(_trailPts[i] + side);
         }
         _trailMesh.SurfaceEnd();
-    }
-
-    // Interpolated ghost position at time t along the best-lap recording.
-    private Vector3 SamplePos(float t)
-    {
-        int i = 0;
-        while (i < _bestGhost.Count - 2 && _bestGhost[i + 1].T < t) i++;
-        Sample a = _bestGhost[i], b = _bestGhost[i + 1];
-        float u = Mathf.Clamp((t - a.T) / Mathf.Max(b.T - a.T, 1e-4f), 0f, 1f);
-        return a.Pos.Lerp(b.Pos, u);
     }
 
     private void SaveGhost()

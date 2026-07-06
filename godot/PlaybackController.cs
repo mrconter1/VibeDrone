@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 // Playback theatre: replays the best lap with a chase camera following behind a solid drone.
@@ -12,6 +13,11 @@ public partial class PlaybackController : Node3D
     private Camera3D _cam = null!;
     private DroneModel _drone = null!;
     private Label _hint = null!;
+    private MeshInstance3D _trail = null!;
+    private ImmediateMesh _trailMesh = null!;
+    private readonly List<Vector3> _trailPts = new();
+    private readonly List<float> _trailAge = new();
+    private readonly List<Vector3> _trailRight = new();
     private bool _active;
     private float _time;
 
@@ -26,6 +32,25 @@ public partial class PlaybackController : Node3D
 
         _drone = new DroneModel { Ghost = false, Visible = false, ProcessMode = ProcessModeEnum.Always };
         AddChild(_drone);
+
+        _trailMesh = new ImmediateMesh();
+        _trail = new MeshInstance3D
+        {
+            Mesh = _trailMesh,
+            Visible = false,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                VertexColorUseAsAlbedo = true,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                EmissionEnabled = true,
+                Emission = new Color(0.3f, 0.95f, 1f),
+                EmissionEnergyMultiplier = 3f,
+            },
+        };
+        AddChild(_trail);
 
         var layer = new CanvasLayer { Layer = 9 };
         AddChild(layer);
@@ -56,6 +81,7 @@ public partial class PlaybackController : Node3D
     {
         _active = false;
         _drone.Visible = false;
+        _trail.Visible = false;
         _hint.Visible = false;
         GetTree().Paused = false;
         Input.MouseMode = Input.MouseModeEnum.Captured;
@@ -76,8 +102,10 @@ public partial class PlaybackController : Node3D
     {
         if (!_active) return;
         _time += (float)delta;
-        if (_time > _ctrl.BestLapDuration) _time = 0f;   // loop
-        PlaceDroneAndCam((float)delta, snap: false);
+        bool snap = false;
+        if (_time > _ctrl.BestLapDuration) { _time = 0f; snap = true; }   // loop -> snap the cam
+        PlaceDroneAndCam((float)delta, snap);
+        BuildTrail();
     }
 
     private void PlaceDroneAndCam(float delta, bool snap)
@@ -90,5 +118,43 @@ public partial class PlaybackController : Node3D
         _cam.GlobalPosition = snap ? want
             : _cam.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-6f * delta));
         _cam.LookAt(pos + fwd * 2f, Vector3.Up);
+    }
+
+    // Fading ribbon behind the replay drone, sampled from the best-lap path.
+    private void BuildTrail()
+    {
+        _trailMesh.ClearSurfaces();
+        const float window = 1.2f, halfW = 0.35f, step = 0.03f;
+        float t0 = Mathf.Max(_time - window, 0f);
+        if (_time - t0 < 0.05f) { _trail.Visible = false; return; }
+
+        _trailPts.Clear();
+        _trailAge.Clear();
+        _trailRight.Clear();
+        for (float t = t0; t < _time; t += step)
+        {
+            _ctrl.SampleBestLap(t, out Vector3 p, out Quaternion r);
+            _trailPts.Add(p); _trailAge.Add((_time - t) / window); _trailRight.Add(new Basis(r).X);
+        }
+        _ctrl.SampleBestLap(_time, out Vector3 head, out Quaternion hr);
+        _trailPts.Add(head); _trailAge.Add(0f); _trailRight.Add(new Basis(hr).X);
+        if (_trailPts.Count < 2) { _trail.Visible = false; return; }
+
+        _trail.Visible = true;
+        _trailMesh.SurfaceBegin(Mesh.PrimitiveType.TriangleStrip);
+        int last = _trailPts.Count - 1;
+        for (int i = 0; i <= last; i++)
+        {
+            Vector3 r = _trailRight[i];
+            Vector3 side = (r.LengthSquared() > 1e-6f ? r.Normalized() : Vector3.Right)
+                           * (halfW * (1f - _trailAge[i]));   // roll with the drone, taper to the tail
+            float a = 1f - _trailAge[i];
+            var col = new Color(0.4f, 0.95f, 1f, a * a);
+            _trailMesh.SurfaceSetColor(col);
+            _trailMesh.SurfaceAddVertex(_trailPts[i] - side);
+            _trailMesh.SurfaceSetColor(col);
+            _trailMesh.SurfaceAddVertex(_trailPts[i] + side);
+        }
+        _trailMesh.SurfaceEnd();
     }
 }
