@@ -5,7 +5,11 @@
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File StartGame.ps1
     powershell -ExecutionPolicy Bypass -File StartGame.ps1 -Editor   # open the editor instead
-    powershell -ExecutionPolicy Bypass -File StartGame.ps1 -NoBuild  # skip the C# build
+    powershell -ExecutionPolicy Bypass -File StartGame.ps1 -NoBuild  # never build
+    powershell -ExecutionPolicy Bypass -File StartGame.ps1 -Build    # force a build
+
+    By default the build is skipped automatically when no .cs/.csproj file has changed
+    since the last build, so an unchanged relaunch starts without the ~2s MSBuild step.
 
 .NOTES
     If Godot crashes at startup (the AMD Radeon 740M iGPU can segfault inside the
@@ -14,7 +18,8 @@
 [CmdletBinding()]
 param(
     [switch]$Editor,     # open the Godot editor instead of running the scene
-    [switch]$NoBuild,    # skip the dotnet build (faster if code is unchanged)
+    [switch]$NoBuild,    # always skip the dotnet build
+    [switch]$Build,      # always build, even if nothing looks stale
     [string]$Godot       # explicit path to the Godot .NET executable
 )
 
@@ -39,11 +44,26 @@ if (-not $Godot -or -not (Test-Path $Godot)) {
 Write-Host "Godot: $Godot" -ForegroundColor Cyan
 
 # 2. build the C# assembly (Godot needs it before running)
-if (-not $NoBuild) {
+#    Skip the ~2s MSBuild step when the built assembly is already newer than every
+#    source file (.cs / .csproj) - an unchanged relaunch then starts straight away.
+#    -NoBuild forces skip; -Build forces a build even if nothing looks stale.
+function Test-BuildStale {
+    $dll = Join-Path $GodotDir ".godot\mono\temp\bin\Debug\OpenDrone.dll"
+    if (-not (Test-Path $dll)) { return $true }   # never built
+    $built = (Get-Item $dll).LastWriteTimeUtc
+    $newest = Get-ChildItem $GodotDir -Recurse -Include *.cs, *.csproj -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '\\\.godot\\' } |
+        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    return ($newest -and $newest.LastWriteTimeUtc -gt $built)
+}
+
+if (-not $NoBuild -and ($Build -or (Test-BuildStale))) {
     Write-Host "Building C# ..." -ForegroundColor Cyan
     Push-Location $GodotDir
     try { dotnet build | Out-Host; if ($LASTEXITCODE -ne 0) { throw "dotnet build failed." } }
     finally { Pop-Location }
+} else {
+    Write-Host "C# unchanged - skipping build." -ForegroundColor DarkGray
 }
 
 # 3. launch
