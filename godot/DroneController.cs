@@ -30,6 +30,8 @@ public partial class DroneController : Node3D
     private Node3D _drone = null!;      // set in _Ready
     private Camera3D _cam = null!;
     private Hud _osd = null!;
+    private MotorAudio _audio = null!;
+    private const float ProxyMax = 3.85f;   // ~ thrust proxy at full throttle, for effort normalisation
     private float _kThrottle;
     private float _flightTime;
     private float _curThrottle;
@@ -75,6 +77,9 @@ public partial class DroneController : Node3D
         AddChild(layer);
         _osd = new Hud();
         layer.AddChild(_osd);
+
+        _audio = new MotorAudio();
+        AddChild(_audio);
 
         if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Hidden;
@@ -146,6 +151,7 @@ public partial class DroneController : Node3D
             if (k.Keycode == Key.Escape) GetTree().Quit();
             else if (k.Keycode == Key.R) { _log?.StoreLine(string.Format(CultureInfo.InvariantCulture, "# reset at {0:0.0}s", _sessionTime)); ResetDrone(); }
             else if (k.Keycode == Key.Tab) { Replay = !Replay; if (Replay && _rt.Count == 0) LoadReplay(); _replayT = 0; ResetDrone(); }
+            else if (k.Keycode == Key.S) _audio.Cycle();   // cycle motor-sound variant (OFF -> SINE -> SAW -> PULSE -> RICH -> OFF)
         }
     }
 
@@ -153,7 +159,7 @@ public partial class DroneController : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (Replay && _rt.Count > 1) { PlayReplay((float)delta); ApplyHud("REPLAY (Tab=live)"); return; }
+        if (Replay && _rt.Count > 1) { PlayReplay((float)delta); _audio.SetEffort(0f); ApplyHud("REPLAY (Tab=live)"); return; }
 
         float roll, pitch, yaw, throttle;
         if (Input.GetConnectedJoypads().Count > 0)
@@ -180,6 +186,9 @@ public partial class DroneController : Node3D
         ApplyTransform(_fm.Pos, _fm.Rot);
         _curThrottle = throttle;
         _flightTime += (float)delta;
+
+        // drive motor audio by how hard the motors are working (thrust proxy = throttle + stick activity)
+        _audio.SetEffort(_fm.ThrustProxy(roll, pitch, yaw, throttle) / ProxyMax);
 
         // fixed FOV (typical FPV camera); no speed-scaling
 
@@ -262,6 +271,7 @@ public partial class DroneController : Node3D
         _osd.TimeSec = _flightTime;
         _osd.Fov = _cam.Fov;
         _osd.Fps = (float)Engine.GetFramesPerSecond();
+        _osd.Sound = _audio.CurrentName;
         // climb angle (pitch) and roll from the drone basis, for the artificial horizon
         _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
         _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));

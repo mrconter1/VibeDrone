@@ -6,6 +6,7 @@ public partial class Hud : Control
 {
     public float Speed, Alt, Throttle, RollDeg, PitchDeg, TimeSec, Fov, Fps;
     public string Mode = "LIVE";
+    public string Sound = "OFF";
     public string Joypad = "";
 
     private Font _font = null!;   // set in _Ready
@@ -57,8 +58,8 @@ public partial class Hud : Control
         Text(Size.X - 232, Size.Y - 96, "alt m", 18, dim);
 
         // top bar
-        Text(40, 50, $"[{Mode}]   {TimeSec,5:0.0}s   FOV {Fov:0}   {Fps:0} FPS", 22, hudCol);
-        Text(40, 78, "Esc quit   R reset   Tab replay", 16, dim);
+        Text(40, 50, $"[{Mode}]   {TimeSec,5:0.0}s   FOV {Fov:0}   {Fps:0} FPS   SND {Sound}", 22, hudCol);
+        Text(40, 78, "Esc quit   R reset   Tab replay   S sound", 16, dim);
     }
 
     private void Text(float x, float y, string s, int size, Color col)
