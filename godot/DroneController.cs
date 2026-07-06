@@ -34,6 +34,9 @@ public partial class DroneController : Node3D
     private float _kThrottle;
     private float _flightTime;
     private float _curThrottle;
+    private bool _hasJoypad;          // refreshed every ~15 ticks, not polled per frame (alloc)
+    private int _statusKey = int.MinValue;   // caches the HUD race-status string
+    private string _statusText = "";
     private readonly float[] _axes = new float[16];
     private SessionLog _sessionLog = null!;
     private Arena _arena = null!;
@@ -147,10 +150,20 @@ public partial class DroneController : Node3D
 
     private static float Dead(float v, float dz = 0.04f) => Mathf.Abs(v) < dz ? 0f : v;
 
+    // Visual-only (ghost + trail) at render rate, not the 250 Hz physics rate.
+    public override void _Process(double delta)
+    {
+        if (_raceRunning) UpdateGhost();
+        else { _ghost.Visible = false; _trail.Visible = false; }
+    }
+
     public override void _PhysicsProcess(double delta)
     {
+        if (Engine.GetPhysicsFrames() % 15 == 0)   // refresh joypad presence occasionally (avoids per-tick alloc)
+            _hasJoypad = Input.GetConnectedJoypads().Count > 0;
+
         float roll, pitch, yaw, throttle;
-        if (Input.GetConnectedJoypads().Count > 0)
+        if (_hasJoypad)
         {
             roll = Dead(_axes[AxisRoll]); pitch = Dead(_axes[AxisPitch]); yaw = Dead(_axes[AxisYaw]);
             throttle = (_axes[AxisThrottle] + 1f) * 0.5f;
@@ -196,7 +209,6 @@ public partial class DroneController : Node3D
         {
             _lapTime += (float)delta;
             RecordSample((float)delta);
-            UpdateGhost();
             // touch a bar / fly past a gate / hit the ground -> back to the start line (same as R)
             if (_gateHit || MissedGate() || _drone.GlobalPosition.Y < 0.5f) { StartRace(); return; }
         }
@@ -526,8 +538,15 @@ public partial class DroneController : Node3D
         _osd.LastLap = _lastLap;
         _osd.BestLap = _bestLaps.Count > 0 ? _bestLaps[0] : 0f;
         _osd.Ranks = _ranks;
-        _osd.RaceStatus = _raceArmed ? "GO!  (throttle up)"
+        // rebuild the status string only when it changes (avoids a per-tick string alloc)
+        int key = _raceArmed ? -1 : _raceRunning ? _gatePassed : -2;
+        if (key != _statusKey)
+        {
+            _statusKey = key;
+            _statusText = _raceArmed ? "GO!  (throttle up)"
                         : _raceRunning ? $"gate {_gatePassed}/{regular}" : "R to start";
+        }
+        _osd.RaceStatus = _statusText;
         // climb angle (pitch) and roll from the drone basis, for the artificial horizon
         _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
         _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));
