@@ -23,11 +23,14 @@ public partial class DroneController : Node3D
     [Export] public float CameraForward = 0.08f;   // metres in front of CG
     [Export] public float CameraUp = 0.03f;        // metres above CG
     [Export] public int Substeps = 1;   // physics already ticks at 250 Hz (project.godot)
+    [Export] public float DroneRadius = 0.15f;   // ~5" quad half-width, for gate collision
+    [Export] public float Restitution = 0.18f;   // normal rebound (low: real quads barely bounce)
+    [Export] public float HitFriction = 0.55f;   // tangential speed scrubbed off on a hit (deflect, not slide)
     [Export] public bool Replay = false;                 // start live; Tab to watch recorded replay
     [Export] public string ReplayFile = "res://replay.csv";
 
     private readonly FlightModel _fm = new();
-    private Node3D _drone = null!;      // set in _Ready
+    private CharacterBody3D _drone = null!;   // kinematic body so it can collide/bounce off gates
     private Camera3D _cam = null!;
     private Hud _osd = null!;
     private MotorAudio _audio = null!;
@@ -65,8 +68,9 @@ public partial class DroneController : Node3D
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
         BuildWorld();
 
-        _drone = new Node3D();
+        _drone = new CharacterBody3D();
         AddChild(_drone);
+        _drone.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = DroneRadius } });
         _cam = new Camera3D { Fov = CameraFovDeg };
         _drone.AddChild(_cam);
         _cam.Position = new Vector3(0f, CameraUp, CameraForward);   // nose mount (drone local frame)
@@ -186,7 +190,7 @@ public partial class DroneController : Node3D
         for (int i = 0; i < Substeps; i++)
             _fm.Step(roll, pitch, yaw, throttle, dt);
 
-        ApplyTransform(_fm.Pos, _fm.Rot);
+        MoveDroneWithBounce();
         _curThrottle = throttle;
         _flightTime += (float)delta;
 
@@ -217,6 +221,34 @@ public partial class DroneController : Node3D
     {
         ToGodot(pU, qU, out Vector3 pos, out Basis basis);
         _drone.GlobalTransform = new Transform3D(basis, pos);
+    }
+
+    // Move the drone toward the model's new pose using MoveAndCollide, so it bounces off
+    // gate bars. On contact: reflect the model velocity about the surface normal (scaled by
+    // Restitution) and sync the model position to where the body actually ended up.
+    // Model frame <-> Godot frame is just a Z flip (see ToGodot), for both position and velocity.
+    private void MoveDroneWithBounce()
+    {
+        ToGodot(_fm.Pos, _fm.Rot, out Vector3 target, out Basis basis);
+        _drone.GlobalBasis = basis;                         // orientation (sphere shape: rotation is moot)
+        KinematicCollision3D col = _drone.MoveAndCollide(target - _drone.GlobalPosition);
+        if (col != null)
+        {
+            Vector3 n = col.GetNormal();
+            var vG = new Vector3(_fm.Vel.X, _fm.Vel.Y, -_fm.Vel.Z);
+            float into = vG.Dot(n);
+            if (into < 0f)                                  // only respond if moving into the surface
+            {
+                // real-drone hit: only a small normal rebound, and the tangential slide is
+                // heavily scrubbed (energy lost) so it thuds/deflects instead of bouncing.
+                Vector3 vN = into * n;                      // component into the surface
+                Vector3 vT = vG - vN;                       // tangential (along the bar)
+                vG = vT * (1f - HitFriction) - Restitution * vN;
+                _fm.Vel = new NVec(vG.X, vG.Y, -vG.Z);
+            }
+        }
+        Vector3 gp = _drone.GlobalPosition;                 // keep the model in sync with the real position
+        _fm.Pos = new NVec(gp.X, gp.Y, -gp.Z);
     }
 
     private void ResetDrone()
@@ -345,7 +377,9 @@ public partial class DroneController : Node3D
         }
     }
 
-    // A square gate frame (4 emissive bars) in the XY plane, offset along local Z.
+    // A square gate frame (4 emissive, collidable bars) in the XY plane, offset along local Z.
+    // Every bar spans the FULL outer square, so they overlap at the corners into solid,
+    // fused joints (one continuous welded frame; 6 m opening).
     private static Node3D SquareFrame(Color c, float z)
     {
         var frame = new Node3D { Position = new Vector3(0f, 0f, z) };
@@ -355,16 +389,21 @@ public partial class DroneController : Node3D
             AlbedoColor = c, EmissionEnabled = true, Emission = c, EmissionEnergyMultiplier = 1.0f,
         };
         const float half = 3.0f, t = 0.3f;      // 6 m opening, 0.3 m bars
-        const float outer = half * 2f + t, off = half + t * 0.5f;
+        const float full = half * 2f + 2f * t, off = half + t * 0.5f;   // full outer side, corner-to-corner
         (Vector3 size, Vector3 pos)[] bars =
         {
-            (new Vector3(outer, t, t), new Vector3(0f, off, 0f)),      // top
-            (new Vector3(outer, t, t), new Vector3(0f, -off, 0f)),     // bottom
-            (new Vector3(t, half * 2f, t), new Vector3(-off, 0f, 0f)), // left
-            (new Vector3(t, half * 2f, t), new Vector3(off, 0f, 0f)),  // right
+            (new Vector3(full, t, t), new Vector3(0f, off, 0f)),    // top
+            (new Vector3(full, t, t), new Vector3(0f, -off, 0f)),   // bottom
+            (new Vector3(t, full, t), new Vector3(-off, 0f, 0f)),   // left  (overlaps top/bottom at corners)
+            (new Vector3(t, full, t), new Vector3(off, 0f, 0f)),    // right
         };
         foreach (var (size, pos) in bars)
-            frame.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, Position = pos, MaterialOverride = mat });
+        {
+            var body = new StaticBody3D { Position = pos };
+            body.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = mat });
+            body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+            frame.AddChild(body);
+        }
         return frame;
     }
 
