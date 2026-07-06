@@ -26,3 +26,6 @@ godot/*.sln
 # C# validation harness build output
 validate-cs/bin/
 validate-cs/obj/
+
+# Godot session perf log
+*.log

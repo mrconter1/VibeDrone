@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using Godot;
 using OpenDrone;
 using NVec = System.Numerics.Vector3;
@@ -14,9 +15,9 @@ public partial class DroneController : Node3D
     [Export] public int JoyDevice = 0;
     [Export] public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
     [Export] public float SignRoll = 1f, SignPitch = -1f, SignYaw = -1f, SignThrottle = 1f;
-    // Typical FPV camera: 120 deg FOV (common freestyle, 120-150 range), ~30 deg uptilt
-    // (freestyle 25-35), nose-mounted a little forward and up of the CG.
-    [Export] public float CameraFovDeg = 120f;
+    // FOV 95 deg ~ the reference sim's default (90-100); lower than a real cam's 120+ to cut
+    // the rectilinear edge-stretch warping. ~30 deg uptilt (freestyle 25-35), nose-mounted.
+    [Export] public float CameraFovDeg = 95f;
     [Export] public float CameraTiltDeg = 30f;
     [Export] public float CameraForward = 0.08f;   // metres in front of CG
     [Export] public float CameraUp = 0.03f;        // metres above CG
@@ -33,6 +34,14 @@ public partial class DroneController : Node3D
     private float _curThrottle;
     private readonly float[] _axes = new float[16];
 
+    // per-session performance log (truncated fresh each launch)
+    private Godot.FileAccess _log;
+    private double _sessionTime;      // seconds since launch
+    private double _logElapsed;       // seconds since last log line
+    private int _logFrames;           // rendered frames in the current 1s window
+    private double _worstFrameMs;     // slowest frame in the window (spike detector)
+    private double _minFpsWindow = 1e9;
+
     // replay data
     private readonly List<float> _rt = new();
     private readonly List<NVec> _rpos = new();
@@ -42,8 +51,11 @@ public partial class DroneController : Node3D
     public override void _Ready()
     {
         // report the actual render backend + GPU so a software (llvmpipe) fallback is obvious
-        GD.Print($"Renderer: {ProjectSettings.GetSetting("rendering/renderer/rendering_method")}  " +
-                 $"GPU: {RenderingServer.GetVideoAdapterName()} ({RenderingServer.GetVideoAdapterVendor()})");
+        string renderer = ProjectSettings.GetSetting("rendering/renderer/rendering_method").ToString();
+        string gpu = $"{RenderingServer.GetVideoAdapterName()} ({RenderingServer.GetVideoAdapterVendor()})";
+        GD.Print($"Renderer: {renderer}  GPU: {gpu}");
+
+        OpenLog(renderer, gpu);
 
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
         BuildWorld();
@@ -65,6 +77,58 @@ public partial class DroneController : Node3D
         ResetDrone();
     }
 
+    // Open (and truncate) the per-session performance log. Fresh every launch.
+    private void OpenLog(string renderer, string gpu)
+    {
+        const string path = "user://opendrone_session.log";
+        _log = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write);
+        if (_log == null)
+        {
+            GD.PrintErr("session log: could not open " + path);
+            return;
+        }
+        Vector2I win = DisplayServer.WindowGetSize();
+        _log.StoreLine("=== OpenDrone session log ===");
+        _log.StoreLine($"renderer : {renderer}");
+        _log.StoreLine($"gpu      : {gpu}");
+        _log.StoreLine($"window   : {win.X}x{win.Y}   vsync: {DisplayServer.WindowGetVsyncMode()}");
+        _log.StoreLine($"physics  : {Engine.PhysicsTicksPerSecond} Hz   max_fps: {Engine.MaxFps}   fov: {CameraFovDeg:0}");
+        _log.StoreLine("");
+        _log.StoreLine("t_sec\tfps\tmin_fps_1s\tavg_ms\tworst_ms");
+        _log.Flush();
+        GD.Print("session log -> " + ProjectSettings.GlobalizePath(path));
+    }
+
+    // Once per second: log current/min FPS and average/worst frame time (spike detector).
+    public override void _Process(double delta)
+    {
+        if (_log == null) return;
+        _sessionTime += delta;
+        _logElapsed += delta;
+        _logFrames++;
+        double ms = delta * 1000.0;
+        if (ms > _worstFrameMs) _worstFrameMs = ms;
+        double fps = Engine.GetFramesPerSecond();
+        if (fps < _minFpsWindow) _minFpsWindow = fps;
+
+        if (_logElapsed >= 1.0)
+        {
+            double avgMs = _logElapsed * 1000.0 / System.Math.Max(_logFrames, 1);
+            _log.StoreLine(string.Format(CultureInfo.InvariantCulture,
+                "{0:0.0}\t{1:0}\t{2:0}\t{3:0.00}\t{4:0.00}",
+                _sessionTime, fps, _minFpsWindow, avgMs, _worstFrameMs));
+            _log.Flush();
+            _logElapsed = 0; _logFrames = 0; _worstFrameMs = 0; _minFpsWindow = 1e9;
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        _log?.StoreLine("=== session end ===");
+        _log?.Flush();
+        _log?.Close();
+    }
+
     public override void _Input(InputEvent ev)
     {
         if (ev is InputEventJoypadMotion m && (int)m.Axis < _axes.Length)
@@ -76,7 +140,7 @@ public partial class DroneController : Node3D
         if (ev is InputEventKey { Pressed: true } k)
         {
             if (k.Keycode == Key.Escape) GetTree().Quit();
-            else if (k.Keycode == Key.R) ResetDrone();
+            else if (k.Keycode == Key.R) { _log?.StoreLine(string.Format(CultureInfo.InvariantCulture, "# reset at {0:0.0}s", _sessionTime)); ResetDrone(); }
             else if (k.Keycode == Key.Tab) { Replay = !Replay; if (Replay && _rt.Count == 0) LoadReplay(); _replayT = 0; ResetDrone(); }
         }
     }
@@ -262,7 +326,7 @@ public partial class DroneController : Node3D
             };
             var gate = new MeshInstance3D
             {
-                Mesh = new TorusMesh { InnerRadius = 3.0f, OuterRadius = 3.6f },
+                Mesh = new TorusMesh { InnerRadius = 3.0f, OuterRadius = 3.2f },
                 Position = new Vector3(layout[i].X, 8f, layout[i].Y),
                 MaterialOverride = mat,
             };
