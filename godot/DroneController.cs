@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime;
 using Godot;
 using OpenDrone;
 using NVec = System.Numerics.Vector3;
@@ -50,6 +51,9 @@ public partial class DroneController : Node3D
 
     public override void _Ready()
     {
+        // prefer short GC pauses over throughput: fewer gen2 stalls = fewer missed frames
+        GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+
         // report the actual render backend + GPU so a software (llvmpipe) fallback is obvious
         string renderer = ProjectSettings.GetSetting("rendering/renderer/rendering_method").ToString();
         string gpu = $"{RenderingServer.GetVideoAdapterName()} ({RenderingServer.GetVideoAdapterVendor()})";

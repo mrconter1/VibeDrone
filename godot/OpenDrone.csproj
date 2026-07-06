@@ -3,5 +3,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <Nullable>enable</Nullable>
+    <!-- Background (concurrent) GC so collections don't stall the frame = fewer
+         single-frame vsync misses. Workstation GC (not Server) keeps pause bursts
+         small, which is what matters for a smooth per-frame loop. -->
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
 </Project>
