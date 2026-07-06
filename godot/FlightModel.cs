@@ -32,12 +32,14 @@ namespace OpenDrone
         public float DragLatKd = 0.0489f;    // lateral linear drag
         public float DragLatKq = 0.0215f;    // lateral quadratic drag
         public float Tau = 0.005f;           // motor spool-up time constant (s)
+        public float TauRate = 0.002f;       // angular-rate response lag (s); ~0, kept for parity with the Python model
 
         // --- state ---
         public Vector3 Pos;
         public Vector3 Vel;
         public Quaternion Rot = Quaternion.Identity;
         public float Thrust;                 // current (lagged) thrust acceleration
+        public Vector3 Omega;                // current (lagged) body angular rate
 
         public FlightModel() => Reset();
 
@@ -46,6 +48,7 @@ namespace OpenDrone
             Pos = new Vector3(0f, 2f, 0f);
             Vel = Vector3.Zero;
             Rot = Quaternion.Identity;
+            Omega = Vector3.Zero;
             Thrust = G;
         }
 
@@ -103,7 +106,10 @@ namespace OpenDrone
         // Advance one fixed step. Controls: roll/pitch/yaw in [-1,1], throttle in [0,1].
         public void Step(float roll, float pitch, float yaw, float throttle, float dt)
         {
-            Rot = IntegrateQuat(Rot, BodyRates(roll, pitch, yaw), dt);
+            // angular rate lags the commanded target (first-order; matches the model module)
+            Vector3 targetRate = BodyRates(roll, pitch, yaw);
+            Omega += (targetRate - Omega) * MathF.Min(dt / MathF.Max(TauRate, 1e-4f), 1f);
+            Rot = IntegrateQuat(Rot, Omega, dt);
 
             float s2 = roll * roll + pitch * pitch + yaw * yaw;
             float proxy = MathF.Max(0f, Mix0 * 4f * throttle * throttle
