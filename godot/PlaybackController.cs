@@ -8,7 +8,7 @@ public partial class PlaybackController : Node3D
     [Export] public float Distance = 4.5f;   // chase distance behind the drone
     [Export] public float Height = 1.4f;     // chase height above the drone
 
-    private DroneController _ctrl = null!;
+    private LapRecorder _ctrl = null!;
     private Camera3D _droneCam = null!;
     private Camera3D _cam = null!;
     private DroneModel _drone = null!;
@@ -20,7 +20,7 @@ public partial class PlaybackController : Node3D
     private bool _active;
     private float _time;
 
-    public void Setup(DroneController ctrl, Camera3D droneCam) { _ctrl = ctrl; _droneCam = droneCam; }
+    public void Setup(LapRecorder recorder, Camera3D droneCam) { _ctrl = recorder; _droneCam = droneCam; }
 
     public override void _Ready()
     {

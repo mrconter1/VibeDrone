@@ -51,22 +51,9 @@ public partial class DroneController : Node3D
     private int _missGate = -1;    // gate index the miss-detector is tracking
     private float _missPrevZ;      // drone's previous local-Z vs that gate (plane-crossing test)
     private bool _gateHit;         // drone touched a gate bar this frame
-    private float _lastLap;        // last completed lap (0 = none yet)
-    private readonly List<float> _bestLaps = new();     // ranked fastest laps (persisted)
-    private string _ranks = "";    // cached top-laps board text
     private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
 
-    // ghost: replay of the best lap, raced against
-    private struct Sample { public float T; public Vector3 Pos; public Quaternion Rot; }
-    private readonly List<Sample> _recording = new();   // current lap being recorded
-    private List<Sample> _bestGhost = new();            // best lap trajectory (persisted)
-    private float _recAccum;
-    private int _ghostIdx;
-    private DroneModel _ghost = null!;
-    private TrailRibbon _trail = null!;
-    private readonly List<Vector3> _trailPts = new();   // reused each frame (no per-frame alloc)
-    private readonly List<float> _trailAge = new();
-    private readonly List<Vector3> _trailRight = new(); // drone right-axis at each point (ribbon roll)
+    private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
 
     public override void _Ready()
@@ -101,8 +88,11 @@ public partial class DroneController : Node3D
         menu.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
         AddChild(menu);       // M opens/closes it and pauses the game
 
+        _recorder = new LapRecorder();
+        AddChild(_recorder);   // owns the ghost + trail + best-lap board, loads on _Ready
+
         _playback = new PlaybackController();
-        _playback.Setup(this, _cam);
+        _playback.Setup(_recorder, _cam);
         AddChild(_playback);
 
         var pause = new PauseMenu();
@@ -119,14 +109,6 @@ public partial class DroneController : Node3D
             int idx = i;
             _arena.GateTriggers[i].BodyEntered += body => OnGatePassed(idx, body);
         }
-        _ghost = new DroneModel { Ghost = true, Visible = false };
-        AddChild(_ghost);
-
-        _trail = new TrailRibbon();
-        AddChild(_trail);
-
-        LoadLaps();
-        LoadGhost();
 
         Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
         StartRace();   // begin in fly mode, held fixed at the start line, engine off
@@ -153,8 +135,8 @@ public partial class DroneController : Node3D
     // Visual-only (ghost + trail) at render rate, not the 250 Hz physics rate.
     public override void _Process(double delta)
     {
-        if (_raceRunning) UpdateGhost();
-        else { _ghost.Visible = false; _trail.Visible = false; }
+        if (_raceRunning) _recorder.UpdateVisuals(_lapTime, true);
+        else _recorder.HideGhost();
     }
 
     public override void _PhysicsProcess(double delta)
@@ -189,13 +171,13 @@ public partial class DroneController : Node3D
             if (_armSettle < 0.4f)
             {
                 _armThrottle = throttle;   // keep tracking the resting value while it settles
-                _curThrottle = throttle; _audio.SetEffort(0f); _ghost.Visible = false; _trail.Visible = false;
+                _curThrottle = throttle; _audio.SetEffort(0f); _recorder.HideGhost();
                 ApplyHud("LIVE"); return;
             }
             bool go = Mathf.Abs(throttle - _armThrottle) > 0.08f
                    || Mathf.Abs(roll) > 0.06f || Mathf.Abs(pitch) > 0.06f || Mathf.Abs(yaw) > 0.06f;
-            if (go) { _raceArmed = false; _raceRunning = true; BeginLapRecording(); }
-            else { _curThrottle = throttle; _audio.SetEffort(0f); _ghost.Visible = false; _trail.Visible = false; ApplyHud("LIVE"); return; }
+            if (go) { _raceArmed = false; _raceRunning = true; BeginLap(); }
+            else { _curThrottle = throttle; _audio.SetEffort(0f); _recorder.HideGhost(); ApplyHud("LIVE"); return; }
         }
 
         float dt = (float)delta / Substeps;
@@ -208,7 +190,7 @@ public partial class DroneController : Node3D
         if (_raceRunning)
         {
             _lapTime += (float)delta;
-            RecordSample((float)delta);
+            _recorder.Record((float)delta, _lapTime, _drone.GlobalPosition, _drone.GlobalTransform.Basis.GetRotationQuaternion());
             // touch a bar / fly past a gate / hit the ground -> back to the start line (same as R)
             if (_gateHit || MissedGate() || _drone.GlobalPosition.Y < 0.5f) { StartRace(); return; }
         }
@@ -299,16 +281,13 @@ public partial class DroneController : Node3D
         _raceArmed = true;     // clock starts on first input
         _armSettle = 0f;
         _gateHit = false;
-        _ghost.Visible = false;
-        _trail.Visible = false;
-        BeginLapRecording();
+        _recorder.HideGhost();
+        BeginLap();
     }
 
-    private void BeginLapRecording()
+    private void BeginLap()
     {
-        _recording.Clear();
-        _recAccum = 0f;
-        _ghostIdx = 0;
+        _recorder.BeginLap();
         _missGate = -1;
     }
 
@@ -338,19 +317,10 @@ public partial class DroneController : Node3D
         if (index == 0)                                  // start/finish line
         {
             if (_gatePassed >= regular)                  // valid lap: all gates cleared
-            {
-                bool isBest = _bestLaps.Count == 0 || _lapTime < _bestLaps[0];
-                _lastLap = _lapTime;
-                RecordLap(_lapTime);
-                if (isBest)                              // new record -> this run becomes the ghost
-                {
-                    _bestGhost = new List<Sample>(_recording);
-                    SaveGhost();
-                }
-            }
+                _recorder.CompleteLap(_lapTime);         // records the lap + best ghost
             _lapTime = 0f;                               // (re)start the lap timer
             _gatePassed = 0;
-            BeginLapRecording();                         // and the recording + ghost
+            BeginLap();
         }
         else if (index == _gatePassed + 1)               // next regular gate, in order
         {
@@ -358,166 +328,10 @@ public partial class DroneController : Node3D
         }
     }
 
-    // Sample the drone's pose ~40x/s into the current lap recording.
-    private void RecordSample(float delta)
-    {
-        _recAccum += delta;
-        if (_recAccum < 0.025f) return;
-        _recAccum = 0f;
-        _recording.Add(new Sample
-        {
-            T = _lapTime,
-            Pos = _drone.GlobalPosition,
-            Rot = _drone.GlobalTransform.Basis.GetRotationQuaternion(),
-        });
-    }
-
-    // Place the ghost at the best-lap pose for the current lap time, and draw its fading trail.
-    private void UpdateGhost()
-    {
-        if (_bestGhost.Count < 2) { _ghost.Visible = false; _trail.Visible = false; return; }
-        _ghost.Visible = true;
-        while (_ghostIdx < _bestGhost.Count - 2 && _bestGhost[_ghostIdx + 1].T < _lapTime) _ghostIdx++;
-        Sample a = _bestGhost[_ghostIdx];
-        Sample b = _bestGhost[_ghostIdx + 1];
-        float u = Mathf.Clamp((_lapTime - a.T) / Mathf.Max(b.T - a.T, 1e-4f), 0f, 1f);
-        _ghost.GlobalTransform = new Transform3D(new Basis(a.Rot.Slerp(b.Rot, u)), a.Pos.Lerp(b.Pos, u));
-        BuildTrail();
-    }
-
-    // A fading ribbon along the ghost's recent path (~1.2 s behind it). Both ends are
-    // interpolated to the exact time, so the ribbon grows/recedes smoothly instead of
-    // popping a whole sample at a time.
-    private void BuildTrail()
-    {
-        const float window = 1.2f, halfW = 0.4f;
-        if (_bestGhost.Count < 2) { _trail.Visible = false; return; }
-
-        float tailT = Mathf.Max(_lapTime - window, _bestGhost[0].T);
-        if (_lapTime - tailT < 0.05f) { _trail.Visible = false; return; }
-
-        // ordered point list, oldest -> newest: interpolated tail, real samples between, head at now.
-        // side vector = drone's right axis (from rotation) so the ribbon rolls with the drone.
-        _trailPts.Clear();
-        _trailAge.Clear();
-        _trailRight.Clear();
-        SampleBestLap(tailT, out Vector3 tp, out Quaternion tr);
-        _trailPts.Add(tp); _trailAge.Add(1f); _trailRight.Add(new Basis(tr).X);
-        for (int i = 0; i < _bestGhost.Count; i++)
-        {
-            float t = _bestGhost[i].T;
-            if (t > tailT && t < _lapTime)
-            {
-                _trailPts.Add(_bestGhost[i].Pos);
-                _trailAge.Add((_lapTime - t) / window);
-                _trailRight.Add(new Basis(_bestGhost[i].Rot).X);
-            }
-        }
-        SampleBestLap(_lapTime, out Vector3 hp, out Quaternion hr);
-        _trailPts.Add(hp); _trailAge.Add(0f); _trailRight.Add(new Basis(hr).X);
-
-        _trail.Build(_trailPts, _trailRight, _trailAge, halfW);
-    }
-
-    private void SaveGhost()
-    {
-        var arr = new Godot.Collections.Array();
-        foreach (Sample s in _bestGhost)
-            arr.Add(new Godot.Collections.Dictionary
-            {
-                { "t", s.T }, { "x", s.Pos.X }, { "y", s.Pos.Y }, { "z", s.Pos.Z },
-                { "qx", s.Rot.X }, { "qy", s.Rot.Y }, { "qz", s.Rot.Z }, { "qw", s.Rot.W },
-            });
-        using var f = FileAccess.Open("user://ghost.json", FileAccess.ModeFlags.Write);
-        if (f != null) f.StoreString(Json.Stringify(arr));
-    }
-
-    private void LoadGhost()
-    {
-        const string path = "user://ghost.json";
-        if (!FileAccess.FileExists(path)) return;
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-        if (f == null) return;
-        Variant parsed = Json.ParseString(f.GetAsText());
-        if (parsed.VariantType != Variant.Type.Array) return;
-        _bestGhost = new List<Sample>();
-        foreach (Variant v in parsed.AsGodotArray())
-        {
-            var d = v.AsGodotDictionary();
-            _bestGhost.Add(new Sample
-            {
-                T = d["t"].AsSingle(),
-                Pos = new Vector3(d["x"].AsSingle(), d["y"].AsSingle(), d["z"].AsSingle()),
-                Rot = new Quaternion(d["qx"].AsSingle(), d["qy"].AsSingle(), d["qz"].AsSingle(), d["qw"].AsSingle()),
-            });
-        }
-    }
-
-    private void RecordLap(float t)
-    {
-        _bestLaps.Add(t);
-        _bestLaps.Sort();
-        if (_bestLaps.Count > 5) _bestLaps.RemoveRange(5, _bestLaps.Count - 5);
-        _ranks = "";
-        for (int i = 0; i < _bestLaps.Count; i++)
-            _ranks += $"{i + 1}.  {_bestLaps[i]:00.00}\n";
-        SaveLaps();
-    }
-
-    private void LoadLaps()
-    {
-        const string path = "user://laptimes.json";
-        if (!FileAccess.FileExists(path)) return;
-        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-        if (f == null) return;
-        Variant parsed = Json.ParseString(f.GetAsText());
-        if (parsed.VariantType != Variant.Type.Array) return;
-        foreach (Variant v in parsed.AsGodotArray()) _bestLaps.Add(v.AsSingle());
-        _bestLaps.Sort();
-        _ranks = "";
-        for (int i = 0; i < _bestLaps.Count && i < 5; i++)
-            _ranks += $"{i + 1}.  {_bestLaps[i]:00.00}\n";
-    }
-
-    private void SaveLaps()
-    {
-        var arr = new Godot.Collections.Array();
-        foreach (float t in _bestLaps) arr.Add(t);
-        using var f = FileAccess.Open("user://laptimes.json", FileAccess.ModeFlags.Write);
-        if (f != null) f.StoreString(Json.Stringify(arr));
-    }
-
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
-
-    // --- best-lap access for the playback theatre ---
-    public bool HasBestLap => _bestGhost.Count >= 2;
-    public float BestLapDuration => _bestGhost.Count > 0 ? _bestGhost[^1].T : 0f;
-
-    public void SampleBestLap(float t, out Vector3 pos, out Quaternion rot)
-    {
-        int i = 0;
-        while (i < _bestGhost.Count - 2 && _bestGhost[i + 1].T < t) i++;
-        Sample a = _bestGhost[i], b = _bestGhost[i + 1];
-        float u = Mathf.Clamp((t - a.T) / Mathf.Max(b.T - a.T, 1e-4f), 0f, 1f);
-        pos = a.Pos.Lerp(b.Pos, u);
-        rot = a.Rot.Slerp(b.Rot, u);
-    }
-
     public void StartPlayback() => _playback.Start();
-
-    // Wipe saved best laps + ghost (from the Esc menu), so a fresh best records a new ghost.
-    public void ClearResults()
-    {
-        _bestLaps.Clear();
-        _ranks = "";
-        _lastLap = 0f;
-        _bestGhost = new List<Sample>();
-        _ghost.Visible = false;
-        _trail.Visible = false;
-        SaveLaps();    // writes an empty list
-        SaveGhost();   // writes an empty list
-    }
+    public void ClearResults() => _recorder.Clear();   // Esc menu: wipe saved laps + ghost
 
 
     private void ApplyHud(string mode)
@@ -535,9 +349,9 @@ public partial class DroneController : Node3D
         _osd.ShowDebug = _showDebug;
         int regular = _arena.GateTriggers.Count - 1;
         _osd.LapTime = _lapTime;
-        _osd.LastLap = _lastLap;
-        _osd.BestLap = _bestLaps.Count > 0 ? _bestLaps[0] : 0f;
-        _osd.Ranks = _ranks;
+        _osd.LastLap = _recorder.LastLap;
+        _osd.BestLap = _recorder.BestLap;
+        _osd.Ranks = _recorder.Ranks;
         // rebuild the status string only when it changes (avoids a per-tick string alloc)
         int key = _raceArmed ? -1 : _raceRunning ? _gatePassed : -2;
         if (key != _statusKey)
