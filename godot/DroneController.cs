@@ -40,14 +40,17 @@ public partial class DroneController : Node3D
     private SessionLog _sessionLog = null!;
     private Arena _arena = null!;
 
-    // race state
+    // lap timing state
     private bool _raceArmed;       // sitting fixed at the start, waiting for the first input
     private bool _raceRunning;     // clock ticking
-    private float _raceTime;
+    private float _lapTime;        // current lap elapsed
     private float _armThrottle;    // throttle baseline captured when armed
     private bool _armReady;        // baseline captured
-    private int _passed;           // gates cleared so far
-    private int[] _order = System.Array.Empty<int>();   // gate indices in pass order
+    private int _gatePassed;       // regular gates cleared this lap (need all before the finish counts)
+    private float _lastLap;        // last completed lap (0 = none yet)
+    private readonly List<float> _bestLaps = new();     // ranked fastest laps (persisted)
+    private string _ranks = "";    // cached top-laps board text
+    private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
 
     // replay data
     private readonly List<float> _rt = new();
@@ -85,27 +88,27 @@ public partial class DroneController : Node3D
 
         var menu = new SoundMenu();
         menu.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
-        AddChild(menu);       // S opens/closes it and pauses the game
+        AddChild(menu);       // M opens/closes it and pauses the game
+
+        var pause = new PauseMenu();
+        pause.Setup(this, menu);
+        AddChild(pause);      // Esc opens it
 
         var edit = new EditController();
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
-        // race gate pass-through triggers
+        // race gate pass-through triggers (gate 0 = start/finish, 1..n-1 = regular in order)
         for (int i = 0; i < _arena.GateTriggers.Count; i++)
         {
             int idx = i;
             _arena.GateTriggers[i].BodyEntered += body => OnGatePassed(idx, body);
         }
-        // pass order: regular gates 1..n-1, then the start/finish (gate 0) to finish
-        int n = _arena.GateTriggers.Count;
-        _order = new int[n];
-        for (int i = 0; i < n - 1; i++) _order[i] = i + 1;
-        if (n > 0) _order[n - 1] = 0;
+        LoadLaps();
 
         if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
-        ResetDrone();
+        StartRace();   // begin in fly mode, held fixed at the start line, engine off
     }
 
     public override void _Input(InputEvent ev)
@@ -166,7 +169,7 @@ public partial class DroneController : Node3D
         MoveDroneWithBounce();
         _curThrottle = throttle;
         _flightTime += (float)delta;
-        if (_raceRunning) _raceTime += (float)delta;
+        if (_raceRunning) _lapTime += (float)delta;
 
         // drive motor audio from throttle AND stick activity, so rolls/pitches/yaws audibly
         // rev the motors (the thrust proxy saturates and would hide that). Silent at rest.
@@ -255,21 +258,72 @@ public partial class DroneController : Node3D
     private void StartRace()
     {
         ResetDrone();          // spawn fixed in the start/finish gate
-        _raceTime = 0f;
-        _passed = 0;
+        _lapTime = 0f;
+        _gatePassed = 0;
         _raceRunning = false;
         _raceArmed = true;     // clock starts on first input
         _armReady = false;
     }
 
-    // Fired by a gate's Area3D when a body enters it. Advance the race if it is the drone
-    // passing the next expected gate (in order); finish when the start/finish is crossed last.
+    // Fired by a gate's Area3D when a body enters it. Regular gates (1..n-1) advance the lap in
+    // order; crossing the start/finish (gate 0) records the lap if all gates were cleared and
+    // (re)starts the timer for the next lap.
     private void OnGatePassed(int index, Node3D body)
     {
-        if (!_raceRunning || body != _drone || _passed >= _order.Length || index != _order[_passed]) return;
-        _passed++;
-        if (_passed >= _order.Length) _raceRunning = false;   // finished; time frozen
+        if (!_raceRunning || body != _drone) return;
+        int regular = _arena.GateTriggers.Count - 1;    // gates 1..n-1
+        if (index == 0)                                  // start/finish line
+        {
+            if (_gatePassed >= regular)                  // valid lap: all gates cleared
+            {
+                _lastLap = _lapTime;
+                RecordLap(_lapTime);
+            }
+            _lapTime = 0f;                               // (re)start the lap timer
+            _gatePassed = 0;
+        }
+        else if (index == _gatePassed + 1)               // next regular gate, in order
+        {
+            _gatePassed++;
+        }
     }
+
+    private void RecordLap(float t)
+    {
+        _bestLaps.Add(t);
+        _bestLaps.Sort();
+        if (_bestLaps.Count > 5) _bestLaps.RemoveRange(5, _bestLaps.Count - 5);
+        _ranks = "";
+        for (int i = 0; i < _bestLaps.Count; i++)
+            _ranks += $"{i + 1}.  {_bestLaps[i]:00.00}\n";
+        SaveLaps();
+    }
+
+    private void LoadLaps()
+    {
+        const string path = "user://laptimes.json";
+        if (!FileAccess.FileExists(path)) return;
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (f == null) return;
+        Variant parsed = Json.ParseString(f.GetAsText());
+        if (parsed.VariantType != Variant.Type.Array) return;
+        foreach (Variant v in parsed.AsGodotArray()) _bestLaps.Add(v.AsSingle());
+        _bestLaps.Sort();
+        _ranks = "";
+        for (int i = 0; i < _bestLaps.Count && i < 5; i++)
+            _ranks += $"{i + 1}.  {_bestLaps[i]:00.00}\n";
+    }
+
+    private void SaveLaps()
+    {
+        var arr = new Godot.Collections.Array();
+        foreach (float t in _bestLaps) arr.Add(t);
+        using var f = FileAccess.Open("user://laptimes.json", FileAccess.ModeFlags.Write);
+        if (f != null) f.StoreString(Json.Stringify(arr));
+    }
+
+    public void SetShowDebug(bool on) => _showDebug = on;
+    public bool ShowDebug => _showDebug;
 
     private void PlayReplay(float delta)
     {
@@ -319,12 +373,14 @@ public partial class DroneController : Node3D
         _osd.Fov = _cam.Fov;
         _osd.Fps = (float)Engine.GetFramesPerSecond();
         _osd.Sound = _audio.CurrentName;
-        int gates = _order.Length;
-        _osd.RaceTime = _raceTime;
-        _osd.RaceFinished = !_raceRunning && !_raceArmed && _passed >= gates && gates > 0;
-        _osd.RaceStatus = _raceArmed ? "GO! (throttle up)"
-                        : _raceRunning ? $"{_passed}/{gates} gates"
-                        : _osd.RaceFinished ? "FINISHED - R to restart" : "R to start";
+        _osd.ShowDebug = _showDebug;
+        int regular = _arena.GateTriggers.Count - 1;
+        _osd.LapTime = _lapTime;
+        _osd.LastLap = _lastLap;
+        _osd.BestLap = _bestLaps.Count > 0 ? _bestLaps[0] : 0f;
+        _osd.Ranks = _ranks;
+        _osd.RaceStatus = _raceArmed ? "GO!  (throttle up)"
+                        : _raceRunning ? $"gate {_gatePassed}/{regular}" : "R to start";
         // climb angle (pitch) and roll from the drone basis, for the artificial horizon
         _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
         _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));

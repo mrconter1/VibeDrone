@@ -23,7 +23,6 @@ public partial class EditController : Node3D
     private MeshInstance3D _highlight = null!;
     private StandardMaterial3D _highlightMat = null!;
     private bool _active;
-    private bool _startPending = true;           // enter edit mode on the first frame
     private float _yaw, _pitch;
     private Vector3 _vel;                         // carried momentum, for floaty movement
 
@@ -93,9 +92,6 @@ public partial class EditController : Node3D
         if (ev is not InputEventKey { Pressed: true } key) return;
         switch (key.Keycode)
         {
-            case Key.Escape:
-                GetTree().Quit();                       // close the app from anywhere
-                break;
             case Key.E:
                 Toggle();
                 GetViewport().SetInputAsHandled();
@@ -185,7 +181,6 @@ public partial class EditController : Node3D
 
     public override void _Process(double delta)
     {
-        if (_startPending) { _startPending = false; Toggle(); }   // begin in edit mode
         if (!_active) return;
 
         if (_grabbed != null)

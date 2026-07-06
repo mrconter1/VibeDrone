@@ -31,14 +31,14 @@ public partial class SoundMenu : CanvasLayer
     {
         if (ev is InputEventKey { Pressed: true, Keycode: Key.M })
         {
-            Toggle();
+            SetOpen(!_open);
             GetViewport().SetInputAsHandled();
         }
     }
 
-    private void Toggle()
+    public void SetOpen(bool open)
     {
-        _open = !_open;
+        _open = open;
         _panel.Visible = _open;
         GetTree().Paused = _open;
         // cursor only while the menu is open (to click); captured (hidden) otherwise
