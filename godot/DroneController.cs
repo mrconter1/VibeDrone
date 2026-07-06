@@ -328,31 +328,43 @@ public partial class DroneController : Node3D
 
     private void BuildGates()
     {
-        // a simple circuit of emissive racing gates (torus) to fly through
-        var colors = new[] { new Color(1f, 0.3f, 0.4f), new Color(0.3f, 0.7f, 1f), new Color(1f, 0.8f, 0.2f) };
+        // a circuit of square gates to fly through. Each gate has a GREEN frame on the
+        // entry side (-Z) and a RED frame on the far side (+Z), so the correct direction
+        // through is obvious.
         Vector2[] layout =
         {
             new(0, 40), new(35, 75), new(0, 110), new(-45, 90),
             new(-60, 40), new(-30, 5), new(30, 10), new(55, 45),
         };
-        for (int i = 0; i < layout.Length; i++)
+        foreach (var p in layout)
         {
-            var mat = new StandardMaterial3D
-            {
-                AlbedoColor = colors[i % colors.Length],
-                EmissionEnabled = true,
-                Emission = colors[i % colors.Length],
-                EmissionEnergyMultiplier = 2.5f,
-            };
-            var gate = new MeshInstance3D
-            {
-                Mesh = new TorusMesh { InnerRadius = 3.0f, OuterRadius = 3.2f },
-                Position = new Vector3(layout[i].X, 8f, layout[i].Y),
-                MaterialOverride = mat,
-            };
-            gate.RotateX(Mathf.Pi / 2f); // stand the ring upright to fly through
+            var gate = new Node3D { Position = new Vector3(p.X, 8f, p.Y) };
+            gate.AddChild(SquareFrame(new Color(0.10f, 1.0f, 0.30f), -0.18f));  // green: fly THROUGH this side
+            gate.AddChild(SquareFrame(new Color(1.0f, 0.15f, 0.20f), 0.18f));   // red: wrong side
             AddChild(gate);
         }
+    }
+
+    // A square gate frame (4 emissive bars) in the XY plane, offset along local Z.
+    private static Node3D SquareFrame(Color c, float z)
+    {
+        var frame = new Node3D { Position = new Vector3(0f, 0f, z) };
+        var mat = new StandardMaterial3D
+        {
+            AlbedoColor = c, EmissionEnabled = true, Emission = c, EmissionEnergyMultiplier = 2.5f,
+        };
+        const float half = 3.0f, t = 0.3f;      // 6 m opening, 0.3 m bars
+        const float outer = half * 2f + t, off = half + t * 0.5f;
+        (Vector3 size, Vector3 pos)[] bars =
+        {
+            (new Vector3(outer, t, t), new Vector3(0f, off, 0f)),      // top
+            (new Vector3(outer, t, t), new Vector3(0f, -off, 0f)),     // bottom
+            (new Vector3(t, half * 2f, t), new Vector3(-off, 0f, 0f)), // left
+            (new Vector3(t, half * 2f, t), new Vector3(off, 0f, 0f)),  // right
+        };
+        foreach (var (size, pos) in bars)
+            frame.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, Position = pos, MaterialOverride = mat });
+        return frame;
     }
 
     private const string GridShaderCode = @"
