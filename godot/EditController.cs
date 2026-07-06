@@ -124,7 +124,7 @@ public partial class EditController : Node3D
             Vector3 e = _droneCam.GlobalRotation;
             _yaw = e.Y; _pitch = Mathf.Clamp(e.X, -1.55f, 1.55f);
             _cam.Rotation = new Vector3(_pitch, _yaw, 0f);
-            _cam.Current = true;
+            _cam.MakeCurrent();              // switch view to the edit camera
             _vel = Vector3.Zero;
             _audio.SetEffort(0f);            // engine off in edit mode
         }
@@ -133,7 +133,7 @@ public partial class EditController : Node3D
             _grabbed = null;                 // drop anything being carried
             _hovered = null;
             _highlight.Visible = false;
-            _droneCam.Current = true;
+            _droneCam.MakeCurrent();         // switch view back to the drone
         }
     }
 

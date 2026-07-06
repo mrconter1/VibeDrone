@@ -36,7 +36,6 @@ public partial class DroneController : Node3D
     private float _kThrottle;
     private float _flightTime;
     private float _curThrottle;
-    private bool _hasJoypad;           // cached; GetConnectedJoypads() allocates, don't poll it per tick
     private readonly float[] _axes = new float[16];
     private SessionLog _sessionLog = null!;
 
@@ -50,10 +49,6 @@ public partial class DroneController : Node3D
     {
         // prefer short GC pauses over throughput: fewer gen2 stalls = fewer missed frames
         GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
-
-        // cache joypad presence; refresh only on connect/disconnect (avoids a per-tick alloc)
-        _hasJoypad = Input.GetConnectedJoypads().Count > 0;
-        Input.JoyConnectionChanged += (_, _) => _hasJoypad = Input.GetConnectedJoypads().Count > 0;
 
         _sessionLog = new SessionLog();
         AddChild(_sessionLog);
@@ -114,7 +109,7 @@ public partial class DroneController : Node3D
         if (Replay && _rt.Count > 1) { PlayReplay((float)delta); _audio.SetEffort(0f); ApplyHud("REPLAY (Tab=live)"); return; }
 
         float roll, pitch, yaw, throttle;
-        if (_hasJoypad)
+        if (Input.GetConnectedJoypads().Count > 0)
         {
             roll = Dead(_axes[AxisRoll]); pitch = Dead(_axes[AxisPitch]); yaw = Dead(_axes[AxisYaw]);
             throttle = (_axes[AxisThrottle] + 1f) * 0.5f;
