@@ -83,6 +83,13 @@ EndGlobal
 
 New-Item -ItemType Directory -Force (Split-Path $OutExe) | Out-Null
 
+# Compile the C# in the ExportRelease config FIRST. Headless export otherwise can pack
+# the previously-built assembly before its own compile finishes, so a code change only
+# showed up on the second run. Building here guarantees the fresh DLL is present.
+Write-Host "Building C# (ExportRelease) ..." -ForegroundColor Cyan
+dotnet build $slnPath -c ExportRelease -v quiet | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "C# build (ExportRelease) failed." }
+
 Write-Host "Exporting Release build ..." -ForegroundColor Cyan
 # --headless: no editor window; --export-release: optimized C#, no debug symbols
 & $Godot --headless --path $GodotDir --export-release "Windows Desktop" $OutExe
