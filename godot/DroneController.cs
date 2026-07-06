@@ -82,7 +82,7 @@ public partial class DroneController : Node3D
         AddChild(menu);       // S opens/closes it and pauses the game
 
         var edit = new EditController();
-        edit.Setup(_cam);     // E toggles a Minecraft-style free-fly camera (pauses the game)
+        edit.Setup(_cam, _audio);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
         if (Replay) LoadReplay();

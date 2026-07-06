@@ -43,7 +43,7 @@ public partial class SoundMenu : CanvasLayer
         GetTree().Paused = _open;
         // cursor only while the menu is open (to click); captured (hidden) otherwise
         Input.MouseMode = _open ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
-        if (_open) _audio.SetEffort(0f);   // start from silence; use the throttle buttons
+        _audio.SetEffort(0f);   // silence on open (use the throttle buttons) and on close
     }
 
     private void BuildUi()

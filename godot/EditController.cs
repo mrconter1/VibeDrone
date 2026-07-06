@@ -1,31 +1,36 @@
 using Godot;
 
-// Free-fly "edit" camera, Minecraft-creative style. Press E to toggle: the game pauses,
-// the mouse is captured for look, and you fly the camera with WASD (+ Space up / Shift
-// down); mouse wheel changes fly speed. Press E again to drop back into the drone.
-// ProcessMode=Always so it works while the tree is paused.
+// Free-fly "edit" camera, Minecraft-creative style. The game STARTS in edit mode.
+// Press E to toggle in/out (drone <-> edit). Fly with WASD (+ Space up / Shift down),
+// mouse to look, wheel to change speed. Point near a gate to highlight it (green sphere);
+// press C to carry it (follows your position, keeps its orientation), C again to drop.
+// While carrying, 1/2 roll, 3/4 pitch, 5/6 yaw the object. ProcessMode=Always (runs paused).
 public partial class EditController : Node3D
 {
     [Export] public float MouseSensitivity = 0.003f;
     [Export] public float MoveSpeed = 25f;      // m/s target, adjustable with the mouse wheel
     [Export] public float Accel = 7f;           // lower = floatier (slower to reach speed / coast to stop)
-    [Export] public float Reach = 70f;          // how far the reticle ray reaches to highlight objects
+    [Export] public float Reach = 120f;         // max distance to highlight an object
+    [Export] public float HighlightRadius = 5f; // how near the aim line must pass a gate to highlight it
+    [Export] public float RotSpeed = 90f;       // deg/s for 1-6 object rotation
 
     private Camera3D _cam = null!;
     private Camera3D _droneCam = null!;          // restored as current when leaving edit mode
+    private MotorAudio _audio = null!;           // silenced while in edit mode
     private Label _hint = null!;
     private EditReticle _reticle = null!;
+    private MeshInstance3D _highlight = null!;
+    private StandardMaterial3D _highlightMat = null!;
     private bool _active;
+    private bool _startPending = true;           // enter edit mode on the first frame
     private float _yaw, _pitch;
-    private Vector3 _vel;                        // carried momentum, for Minecraft-style float
+    private Vector3 _vel;                         // carried momentum, for floaty movement
 
     private Node3D? _hovered;                     // object under the reticle (highlighted)
-    private Node3D? _grabbed;                      // object being carried
-    private Transform3D _grabLocalXform;          // grabbed object's transform in camera-local space
-    private MeshInstance3D _highlight = null!;    // translucent sphere shown around the target
-    private StandardMaterial3D _highlightMat = null!;
+    private Node3D? _grabbed;                     // object being carried
+    private Vector3 _grabOffset;                  // world position offset from camera while carrying
 
-    public void Setup(Camera3D droneCam) => _droneCam = droneCam;
+    public void Setup(Camera3D droneCam, MotorAudio audio) { _droneCam = droneCam; _audio = audio; }
 
     public override void _Ready()
     {
@@ -38,16 +43,16 @@ public partial class EditController : Node3D
         AddChild(layer);
         _hint = new Label
         {
-            Text = "EDIT MODE   E exit   WASD/Space/Shift fly   wheel speed   C grab/drop object",
+            Text = "EDIT MODE   E fly drone   WASD/Space/Shift move   wheel speed   C grab/drop   1-6 rotate",
             Position = new Vector2(40, 40),
             Visible = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore,   // don't let it eat mouse events
         };
         layer.AddChild(_hint);
 
         _reticle = new EditReticle { Visible = false };
         layer.AddChild(_reticle);
 
-        // translucent sphere used to highlight the targeted / carried object
         _highlightMat = new StandardMaterial3D
         {
             AlbedoColor = new Color(0.3f, 1f, 0.5f, 0.16f),
@@ -64,22 +69,11 @@ public partial class EditController : Node3D
         AddChild(_highlight);
     }
 
-    public override void _UnhandledInput(InputEvent ev)
+    // Mouse in _Input so GUI/paused state can never swallow it (look was dropping while WASD held).
+    public override void _Input(InputEvent ev)
     {
-        if (ev is InputEventKey { Pressed: true, Keycode: Key.E })
-        {
-            Toggle();
-            GetViewport().SetInputAsHandled();
-            return;
-        }
         if (!_active) return;
-
-        if (ev is InputEventKey { Pressed: true, Keycode: Key.C })
-        {
-            GrabOrDrop();
-            GetViewport().SetInputAsHandled();
-        }
-        else if (ev is InputEventMouseMotion mm)
+        if (ev is InputEventMouseMotion mm)
         {
             _yaw -= mm.Relative.X * MouseSensitivity;
             _pitch = Mathf.Clamp(_pitch - mm.Relative.Y * MouseSensitivity, -1.55f, 1.55f);
@@ -92,12 +86,27 @@ public partial class EditController : Node3D
         }
     }
 
+    public override void _UnhandledInput(InputEvent ev)
+    {
+        if (ev is InputEventKey { Pressed: true, Keycode: Key.E })
+        {
+            Toggle();
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_active && ev is InputEventKey { Pressed: true, Keycode: Key.C })
+        {
+            GrabOrDrop();
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
     private void Toggle()
     {
         _active = !_active;
         GetTree().Paused = _active;
         _hint.Visible = _active;
         _reticle.Visible = _active;
+        Input.MouseMode = Input.MouseModeEnum.Captured;   // hidden either way
 
         if (_active)
         {
@@ -108,7 +117,7 @@ public partial class EditController : Node3D
             _cam.Rotation = new Vector3(_pitch, _yaw, 0f);
             _cam.Current = true;
             _vel = Vector3.Zero;
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+            _audio.SetEffort(0f);            // engine off in edit mode
         }
         else
         {
@@ -116,7 +125,6 @@ public partial class EditController : Node3D
             _hovered = null;
             _highlight.Visible = false;
             _droneCam.Current = true;
-            Input.MouseMode = Input.MouseModeEnum.Captured;   // keep the cursor hidden
         }
     }
 
@@ -127,34 +135,56 @@ public partial class EditController : Node3D
         if (_hovered != null)
         {
             _grabbed = _hovered;
-            // full transform relative to the camera, so it follows position AND rotation
-            _grabLocalXform = _cam.GlobalTransform.AffineInverse() * _grabbed.GlobalTransform;
+            _grabOffset = _grabbed.GlobalPosition - _cam.GlobalPosition;   // position-only follow
         }
     }
 
-    // Ray from the reticle (screen centre) forward; return the movable object it hits, or null.
-    private Node3D? RaycastMovable()
+    // Nearest movable gate whose centre the aim line passes within HighlightRadius (so you only
+    // have to point NEAR it, not exactly at a bar). null if none within reach.
+    private Node3D? FindNearAim()
     {
-        Vector3 from = _cam.GlobalPosition;
-        Vector3 to = from - _cam.GlobalBasis.Z * Reach;      // camera forward = -Z
-        var query = PhysicsRayQueryParameters3D.Create(from, to);
-        var hit = _cam.GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count == 0) return null;
-        Node? n = hit["collider"].As<Node>();
-        while (n != null && !n.IsInGroup("movable")) n = n.GetParent();
-        return n as Node3D;
+        Vector3 o = _cam.GlobalPosition;
+        Vector3 d = -_cam.GlobalBasis.Z;         // forward, unit
+        Node3D? best = null;
+        float bestPerp = HighlightRadius;
+        foreach (Node node in GetTree().GetNodesInGroup("movable"))
+        {
+            if (node is not Node3D g) continue;
+            Vector3 v = g.GlobalPosition - o;
+            float t = v.Dot(d);                   // distance along the aim line
+            if (t < 0f || t > Reach) continue;
+            float perp = (v - d * t).Length();    // how far the line misses the centre
+            if (perp < bestPerp) { bestPerp = perp; best = g; }
+        }
+        return best;
+    }
+
+    private void RotateGrabbed(float delta)
+    {
+        if (_grabbed == null) return;
+        float a = Mathf.DegToRad(RotSpeed) * delta;
+        if (Input.IsKeyPressed(Key.Key1)) _grabbed.RotateObjectLocal(Vector3.Forward, a);   // roll
+        if (Input.IsKeyPressed(Key.Key2)) _grabbed.RotateObjectLocal(Vector3.Forward, -a);
+        if (Input.IsKeyPressed(Key.Key3)) _grabbed.RotateObjectLocal(Vector3.Right, a);      // pitch
+        if (Input.IsKeyPressed(Key.Key4)) _grabbed.RotateObjectLocal(Vector3.Right, -a);
+        if (Input.IsKeyPressed(Key.Key5)) _grabbed.RotateObjectLocal(Vector3.Up, a);         // yaw
+        if (Input.IsKeyPressed(Key.Key6)) _grabbed.RotateObjectLocal(Vector3.Up, -a);
     }
 
     public override void _Process(double delta)
     {
+        if (_startPending) { _startPending = false; Toggle(); }   // begin in edit mode
         if (!_active) return;
 
-        // carry the grabbed object locked to the camera (position + rotation); else highlight
-        // whatever the reticle is pointing at
         if (_grabbed != null)
-            _grabbed.GlobalTransform = _cam.GlobalTransform * _grabLocalXform;
+        {
+            _grabbed.GlobalPosition = _cam.GlobalPosition + _grabOffset;   // follow position, keep orientation
+            RotateGrabbed((float)delta);                                   // 1-6 spin it
+        }
         else
-            _hovered = RaycastMovable();
+        {
+            _hovered = FindNearAim();
+        }
 
         // translucent sphere around the current target (green = hover, orange = carrying)
         Node3D? focus = _grabbed ?? _hovered;
@@ -170,18 +200,17 @@ public partial class EditController : Node3D
         _reticle.Highlight = _hovered != null;
         _reticle.Grabbing = _grabbed != null;
 
+        // floaty movement (ease velocity toward target; coast to a stop when keys released)
         Basis b = _cam.GlobalBasis;
         Vector3 dir = Vector3.Zero;
-        if (Input.IsKeyPressed(Key.W)) dir -= b.Z;      // forward (camera -Z)
+        if (Input.IsKeyPressed(Key.W)) dir -= b.Z;
         if (Input.IsKeyPressed(Key.S)) dir += b.Z;
         if (Input.IsKeyPressed(Key.A)) dir -= b.X;
         if (Input.IsKeyPressed(Key.D)) dir += b.X;
         if (Input.IsKeyPressed(Key.Space)) dir += Vector3.Up;
         if (Input.IsKeyPressed(Key.Shift)) dir += Vector3.Down;
-
-        // ease velocity toward the target (or toward 0 when keys released) -> floaty, no instant stop
-        Vector3 target = dir == Vector3.Zero ? Vector3.Zero : dir.Normalized() * MoveSpeed;
-        _vel = _vel.Lerp(target, 1f - Mathf.Exp(-Accel * (float)delta));
+        Vector3 targetVel = dir == Vector3.Zero ? Vector3.Zero : dir.Normalized() * MoveSpeed;
+        _vel = _vel.Lerp(targetVel, 1f - Mathf.Exp(-Accel * (float)delta));
         _cam.GlobalPosition += _vel * (float)delta;
     }
 }
