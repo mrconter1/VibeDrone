@@ -11,6 +11,8 @@ public partial class PauseMenu : CanvasLayer
     private Button _debugBtn = null!;
     private bool _open;
 
+    private static readonly Color Accent = new(0.62f, 0.98f, 0.76f);   // shared HUD/menu green
+
     public void Setup(DroneController ctrl, SoundMenu sound, HelpOverlay help) { _ctrl = ctrl; _sound = sound; _help = help; }
 
     public override void _Ready()
@@ -49,7 +51,11 @@ public partial class PauseMenu : CanvasLayer
         v.AddThemeConstantOverride("separation", 14);
         _panel.AddChild(v);
 
-        v.AddChild(new Label { Text = "PAUSED" });
+        var title = new Label { Text = "PAUSED" };
+        title.AddThemeFontSizeOverride("font_size", 22);
+        title.AddThemeColorOverride("font_color", Accent);
+        v.AddChild(title);
+        v.AddChild(new HSeparator());
 
         AddButton(v, "Resume", () => SetOpen(false));
 

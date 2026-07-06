@@ -78,7 +78,7 @@ public partial class Hud : Control
         DrawRect(new Rect2(bx, by + bh * (1 - Throttle), 16, bh * Throttle), new Color(0.3f, 0.8f, 1f, 0.9f));
 
         // minimal hint
-        Text(40, 42, "Esc  menu", 15, dim);
+        Text(40, 42, "Esc menu     H help", 15, dim);
 
         // debug overlay (opt-in via Esc menu)
         if (ShowDebug)
