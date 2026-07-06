@@ -47,6 +47,9 @@ public partial class DroneController : Node3D
     private float _armThrottle;    // throttle baseline (settles over the first moments)
     private float _armSettle;      // time armed; input is ignored until it settles
     private int _gatePassed;       // regular gates cleared this lap (need all before the finish counts)
+    private int _missGate = -1;    // gate index the miss-detector is tracking
+    private float _missPrevZ;      // drone's previous local-Z vs that gate (plane-crossing test)
+    private bool _gateHit;         // drone touched a gate bar this frame
     private float _lastLap;        // last completed lap (0 = none yet)
     private readonly List<float> _bestLaps = new();     // ranked fastest laps (persisted)
     private string _ranks = "";    // cached top-laps board text
@@ -215,6 +218,8 @@ public partial class DroneController : Node3D
             _lapTime += (float)delta;
             RecordSample((float)delta);
             UpdateGhost();
+            // touch a bar / fly past a gate / hit the ground -> back to the start line (same as R)
+            if (_gateHit || MissedGate() || _drone.GlobalPosition.Y < 0.5f) { StartRace(); return; }
         }
 
         // drive motor audio from throttle AND stick activity, so rolls/pitches/yaws audibly
@@ -255,6 +260,7 @@ public partial class DroneController : Node3D
         ToGodot(_fm.Pos, _fm.Rot, out Vector3 target, out Basis basis);
         _drone.GlobalBasis = basis;                         // orientation (sphere shape: rotation is moot)
         KinematicCollision3D col = _drone.MoveAndCollide(target - _drone.GlobalPosition);
+        _gateHit = col != null;                             // touched a gate bar
         if (col != null)
         {
             Vector3 n = col.GetNormal();
@@ -309,6 +315,7 @@ public partial class DroneController : Node3D
         _raceRunning = false;
         _raceArmed = true;     // clock starts on first input
         _armSettle = 0f;
+        _gateHit = false;
         _ghost.Visible = false;
         _trail.Visible = false;
         BeginLapRecording();
@@ -319,6 +326,23 @@ public partial class DroneController : Node3D
         _recording.Clear();
         _recAccum = 0f;
         _ghostIdx = 0;
+        _missGate = -1;
+    }
+
+    // True if the drone flew forward THROUGH the next expected gate's plane but outside its
+    // opening (i.e. flew past it) - which can never be completed, so restart.
+    private bool MissedGate()
+    {
+        int regular = _arena.GateTriggers.Count - 1;
+        int nextIdx = _gatePassed < regular ? _gatePassed + 1 : 0;
+        if (nextIdx >= _arena.Gates.Count) return false;
+        Vector3 local = _arena.Gates[nextIdx].GlobalTransform.AffineInverse() * _drone.GlobalPosition;
+        bool missed = false;
+        if (nextIdx == _missGate && _missPrevZ < 0f && local.Z >= 0f)
+            missed = Mathf.Abs(local.X) > 3.4f || Mathf.Abs(local.Y) > 3.4f;   // crossed plane, outside opening
+        _missGate = nextIdx;
+        _missPrevZ = local.Z;
+        return missed;
     }
 
     // Fired by a gate's Area3D when a body enters it. Regular gates (1..n-1) advance the lap in
