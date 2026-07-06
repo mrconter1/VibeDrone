@@ -9,7 +9,7 @@ public partial class Arena : Node3D
 {
     private readonly List<Node3D> _gates = new();
     private readonly List<Area3D> _triggers = new();
-    private Vector2[] _layout = System.Array.Empty<Vector2>();   // current track's gate positions
+    private Transform3D[] _poses = System.Array.Empty<Transform3D>();   // current track's gate poses
 
     public int TrackIndex { get; private set; }
     public string TrackName => TrackLibrary.Name(TrackIndex);
@@ -30,7 +30,7 @@ public partial class Arena : Node3D
     public void LoadTrack(int index)
     {
         TrackIndex = TrackLibrary.Wrap(index);
-        _layout = TrackLibrary.Gates(TrackIndex);
+        _poses = TrackLibrary.BuildGates(TrackIndex);
         foreach (Node3D g in _gates) g.QueueFree();
         _gates.Clear();
         _triggers.Clear();
@@ -88,15 +88,9 @@ public partial class Arena : Node3D
     {
         var green = GateMaterial(new Color(0.10f, 1.0f, 0.30f));
         var red = GateMaterial(new Color(1.0f, 0.15f, 0.20f));
-        for (int i = 0; i < _layout.Length; i++)
+        for (int i = 0; i < _poses.Length; i++)
         {
-            Vector2 fwd = TrackDir(i);                    // travel direction at this gate (loops)
-            float yaw = Mathf.Atan2(fwd.X, fwd.Y);        // align the gate's Z with travel
-            var gate = new Node3D
-            {
-                Position = new Vector3(_layout[i].X, 8f, _layout[i].Y),
-                Rotation = new Vector3(0f, yaw, 0f),
-            };
+            var gate = new Node3D { Transform = _poses[i] };   // pose carries position + orientation
             gate.AddChild(SquareFrame(green, -0.18f));     // fly THROUGH the green side
             gate.AddChild(SquareFrame(red, 0.18f));        // red = wrong side
 
@@ -138,10 +132,6 @@ public partial class Arena : Node3D
             MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = CheckerShaderCode } },
         });
     }
-
-    // Travel direction at gate i, wrapping (it is a loop).
-    private Vector2 TrackDir(int i) =>
-        (_layout[(i + 1) % _layout.Length] - _layout[i]).Normalized();
 
     private static Transform3D DictXform(Godot.Collections.Dictionary d) =>
         new(new Basis(Persistence.ReadRot(d)), Persistence.ReadPos(d));
