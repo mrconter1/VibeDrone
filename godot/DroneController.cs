@@ -81,6 +81,10 @@ public partial class DroneController : Node3D
         menu.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
         AddChild(menu);       // S opens/closes it and pauses the game
 
+        var edit = new EditController();
+        edit.Setup(_cam);     // E toggles a Minecraft-style free-fly camera (pauses the game)
+        AddChild(edit);
+
         if (Replay) LoadReplay();
         Input.MouseMode = Input.MouseModeEnum.Hidden;
         ResetDrone();
@@ -119,7 +123,7 @@ public partial class DroneController : Node3D
         {
             roll = (Input.IsKeyPressed(Key.Right) ? 1 : 0) - (Input.IsKeyPressed(Key.Left) ? 1 : 0);
             pitch = (Input.IsKeyPressed(Key.Up) ? 1 : 0) - (Input.IsKeyPressed(Key.Down) ? 1 : 0);
-            yaw = (Input.IsKeyPressed(Key.E) ? 1 : 0) - (Input.IsKeyPressed(Key.Q) ? 1 : 0);
+            yaw = (Input.IsKeyPressed(Key.C) ? 1 : 0) - (Input.IsKeyPressed(Key.Q) ? 1 : 0);  // E is edit-mode
             _kThrottle = Mathf.Clamp(_kThrottle +
                 ((Input.IsKeyPressed(Key.W) ? 1 : 0) - (Input.IsKeyPressed(Key.S) ? 1 : 0)) * (float)delta, 0f, 1f);
             throttle = _kThrottle;
