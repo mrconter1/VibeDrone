@@ -59,8 +59,7 @@ public partial class PauseMenu : CanvasLayer
 
         AddButton(v, "Resume", () => SetOpen(false));
 
-        Button trackBtn = null!;
-        trackBtn = AddButton(v, TrackLabel(), () => { _ctrl.CycleTrack(); trackBtn.Text = TrackLabel(); });
+        AddButton(v, "Select track", () => { SetOpen(false); _ctrl.OpenTrackMenu(); });
 
         _debugBtn = AddButton(v, DebugLabel(), () =>
         {
@@ -81,7 +80,6 @@ public partial class PauseMenu : CanvasLayer
     }
 
     private string DebugLabel() => "Debug overlay: " + (_ctrl.ShowDebug ? "ON" : "OFF");
-    private string TrackLabel() => $"Track: {_ctrl.TrackName}  ▶";
 
     private static Button AddButton(Control parent, string text, System.Action onPressed)
     {

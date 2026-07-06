@@ -56,6 +56,7 @@ public partial class DroneController : Node3D
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
     private HelpOverlay _help = null!;
+    private TrackMenu _trackMenu = null!;
 
     public override void _Ready()
     {
@@ -98,6 +99,10 @@ public partial class DroneController : Node3D
 
         _help = new HelpOverlay();
         AddChild(_help);      // H opens it (or the pause-menu Controls button)
+
+        _trackMenu = new TrackMenu();
+        _trackMenu.Setup(this);
+        AddChild(_trackMenu);   // opened from the pause menu's "Select track"
 
         var pause = new PauseMenu();
         pause.Setup(this, menu, _help);
@@ -308,7 +313,12 @@ public partial class DroneController : Node3D
     }
 
     public string TrackName => _arena.TrackName;
-    public void CycleTrack() => SetTrack(_arena.TrackIndex + 1);   // pause-menu picker
+    public int TrackIndex => _arena.TrackIndex;
+    public int TrackCount => TrackLibrary.Count;
+    public string TrackNameAt(int i) => TrackLibrary.Name(i);
+    public float BestLapAt(int i) => LapRecorder.BestLapFor(i);
+    public void OpenTrackMenu() => _trackMenu.SetOpen(true);       // from the pause menu
+    public void SelectTrack(int index) => SetTrack(index);         // from the track menu
 
     // Rebuild the arena for another track, re-wire its gates, load that track's records, restart.
     private void SetTrack(int index)

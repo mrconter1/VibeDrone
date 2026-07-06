@@ -150,6 +150,20 @@ public partial class LapRecorder : Node3D
     private string GhostPath => $"user://ghost_{_track}.json";
     private string LapsPath => $"user://laptimes_{_track}.json";
 
+    // Best saved lap for any track (0 if none yet), without switching to it - for the track menu.
+    public static float BestLapFor(int track)
+    {
+        if (!Persistence.TryLoad($"user://laptimes_{track}.json", out Variant parsed)
+            || parsed.VariantType != Variant.Type.Array) return 0f;
+        float best = 0f;
+        foreach (Variant v in parsed.AsGodotArray())
+        {
+            float t = v.AsSingle();
+            if (best == 0f || t < best) best = t;
+        }
+        return best;
+    }
+
     // Switch to another track's records: drop the in-memory ghost/laps and reload that track's.
     public void SetTrack(int index)
     {
