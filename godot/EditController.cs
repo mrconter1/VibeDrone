@@ -28,7 +28,7 @@ public partial class EditController : Node3D
 
     private Node3D? _hovered;                     // object under the reticle (highlighted)
     private Node3D? _grabbed;                     // object being carried
-    private Vector3 _grabOffset;                  // world position offset from camera while carrying
+    private Vector3 _grabLocalPos;                // carried object position in camera-local space
 
     public void Setup(Camera3D droneCam, MotorAudio audio) { _droneCam = droneCam; _audio = audio; }
 
@@ -88,15 +88,24 @@ public partial class EditController : Node3D
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        if (ev is InputEventKey { Pressed: true, Keycode: Key.E })
+        if (ev is not InputEventKey { Pressed: true } key) return;
+        switch (key.Keycode)
         {
-            Toggle();
-            GetViewport().SetInputAsHandled();
-        }
-        else if (_active && ev is InputEventKey { Pressed: true, Keycode: Key.C })
-        {
-            GrabOrDrop();
-            GetViewport().SetInputAsHandled();
+            case Key.Escape:
+                GetTree().Quit();                       // close the app from anywhere
+                break;
+            case Key.E:
+                Toggle();
+                GetViewport().SetInputAsHandled();
+                break;
+            case Key.C when _active:
+                GrabOrDrop();
+                GetViewport().SetInputAsHandled();
+                break;
+            case Key.R when _active && _grabbed != null:
+                _grabbed.GlobalRotation = Vector3.Zero;  // reset carried object's orientation
+                GetViewport().SetInputAsHandled();
+                break;
         }
     }
 
@@ -135,7 +144,8 @@ public partial class EditController : Node3D
         if (_hovered != null)
         {
             _grabbed = _hovered;
-            _grabOffset = _grabbed.GlobalPosition - _cam.GlobalPosition;   // position-only follow
+            // camera-local point: stays in front of you as you fly/look, orientation untouched
+            _grabLocalPos = _cam.GlobalTransform.AffineInverse() * _grabbed.GlobalPosition;
         }
     }
 
@@ -178,8 +188,8 @@ public partial class EditController : Node3D
 
         if (_grabbed != null)
         {
-            _grabbed.GlobalPosition = _cam.GlobalPosition + _grabOffset;   // follow position, keep orientation
-            RotateGrabbed((float)delta);                                   // 1-6 spin it
+            _grabbed.GlobalPosition = _cam.GlobalTransform * _grabLocalPos;   // follow camera pos, keep orientation
+            RotateGrabbed((float)delta);                                     // 1-6 spin it
         }
         else
         {
