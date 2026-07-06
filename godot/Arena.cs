@@ -63,11 +63,23 @@ public partial class Arena : Node3D
             new(0, 40), new(35, 75), new(0, 110), new(-45, 90),
             new(-60, 40), new(-30, 5), new(30, 10), new(55, 45),
         };
-        foreach (var p in layout)
+        for (int i = 0; i < layout.Length; i++)
         {
+            Vector2 p = layout[i];
             var gate = new Node3D { Position = new Vector3(p.X, 8f, p.Y) };
             gate.AddChild(SquareFrame(green, -0.18f));   // fly THROUGH the green side
             gate.AddChild(SquareFrame(red, 0.18f));      // red = wrong side
+            gate.AddChild(new Label3D                    // floating billboard number above the gate
+            {
+                Text = (i + 1).ToString(),
+                Position = new Vector3(0f, 4.6f, 0f),
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                FontSize = 96,
+                PixelSize = 0.02f,
+                Modulate = Colors.White,
+                OutlineSize = 16,
+                OutlineModulate = Colors.Black,
+            });
             gate.AddToGroup("movable");                  // edit mode can grab it
             AddChild(gate);
         }
