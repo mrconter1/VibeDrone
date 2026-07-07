@@ -49,13 +49,13 @@ public partial class Hud : Control
 
         // lap clock (top centre)
         DrawRect(new Rect2(cx - 130, 14, 260, 62), new Color(0f, 0f, 0f, 0.45f));
-        DrawString(_font, new Vector2(cx - 130, 60), FmtTime(LapTime), HorizontalAlignment.Center, 260, 46, Colors.White);
+        DrawString(_font, new Vector2(cx - 130, 60), Format.Time(LapTime, blankZero: false), HorizontalAlignment.Center, 260, 46, Colors.White);
         if (RaceStatus.Length > 0)
             DrawString(_font, new Vector2(cx - 130, 74), RaceStatus, HorizontalAlignment.Center, 260, 14, dim);
         if (LastLap > 0f)
-            DrawString(_font, new Vector2(cx - 132, 98), $"LAST {FmtTime(LastLap)}", HorizontalAlignment.Center, 132, 17, dim);
+            DrawString(_font, new Vector2(cx - 132, 98), $"LAST {Format.Time(LastLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, dim);
         if (BestLap > 0f)
-            DrawString(_font, new Vector2(cx, 98), $"BEST {FmtTime(BestLap)}", HorizontalAlignment.Center, 132, 17, gold);
+            DrawString(_font, new Vector2(cx, 98), $"BEST {Format.Time(BestLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, gold);
 
         // track name + best-laps board (top right)
         if (LevelName.Length > 0)
@@ -87,13 +87,6 @@ public partial class Hud : Control
             if (DevReload) s += "   R rebuild+relaunch";
             Text(40, sz.Y - 40, s, 15, dim);
         }
-    }
-
-    private static string FmtTime(float t)
-    {
-        int m = (int)(t / 60f);
-        float s = t - m * 60f;
-        return m > 0 ? $"{m}:{s:00.00}" : $"{s:0.00}";
     }
 
     private void Text(float x, float y, string s, int size, Color col)

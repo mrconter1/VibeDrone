@@ -70,7 +70,7 @@ public partial class LevelSelect : MenuScreen
                 Alignment = HorizontalAlignment.Left,
                 CustomMinimumSize = new Vector2(360, 46),
                 FocusMode = Control.FocusModeEnum.All,
-                Text = (current ? "▸ " : "   ") + Ctrl.LevelNameAt(i).PadRight(16) + FmtTime(Ctrl.BestLapAt(i)),
+                Text = (current ? "▸ " : "   ") + Ctrl.LevelNameAt(i).PadRight(16) + Format.Time(Ctrl.BestLapAt(i)),
             };
             row.Pressed += () => Ctrl.PlayLevel(idx);
             row.FocusEntered += () => SetDetails(idx);
@@ -87,21 +87,13 @@ public partial class LevelSelect : MenuScreen
         _preview.SetLevel(Ctrl.PreviewLevel(i));     // top-down map schematic
         _detName.Text = Ctrl.LevelNameAt(i);
         float best = Ctrl.BestLapAt(i);
-        _detBest.Text = best > 0f ? $"BEST  {FmtTime(best)}" : "no times yet";
+        _detBest.Text = best > 0f ? $"BEST  {Format.Time(best)}" : "no times yet";
 
         float[] laps = Ctrl.TopLapsAt(i);
         if (laps.Length == 0) { _detList.Text = "-"; _watch.Disabled = true; return; }
         _watch.Disabled = false;
         string s = "";
-        for (int r = 0; r < laps.Length && r < 5; r++) s += $"{r + 1}.   {FmtTime(laps[r])}\n";
+        for (int r = 0; r < laps.Length && r < 5; r++) s += $"{r + 1}.   {Format.Time(laps[r])}\n";
         _detList.Text = s;
-    }
-
-    private static string FmtTime(float t)
-    {
-        if (t <= 0f) return "--";
-        int m = (int)(t / 60f);
-        float s = t - m * 60f;
-        return m > 0 ? $"{m}:{s:00.00}" : $"{s:0.00}";
     }
 }
