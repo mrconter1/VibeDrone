@@ -24,6 +24,10 @@ public partial class Arena : Node3D
     // pass-through triggers.
     public event System.Action? GatesChanged;
 
+    // Set by the controller: the gate index the pilot must clear next (0 = finish, -1 = not racing).
+    // The truck uses it to block the pilot's path.
+    public System.Func<int>? NextGateIndex;
+
     public int GateIndexOf(Node3D n) => _gates.IndexOf(n);
 
     public override void _Ready()

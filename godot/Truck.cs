@@ -6,13 +6,14 @@ using Godot;
 // bar. It only drives while the game is running (pauses with the tree in menus / edit mode).
 public partial class Truck : Node3D
 {
-    [Export] public float Speed = 13f;
-    [Export] public float TurnRate = 1.1f;      // rad/s cab steering
-    [Export] public float BlockChance = 0.4f;   // odds a new target is "block a gate"
+    [Export] public float Speed = 22f;
+    [Export] public float TurnRate = 1.5f;      // rad/s cab steering
+    [Export] public float BlockChance = 0.7f;   // odds a new target is "block a gate"
 
-    private const float CabW = 2.4f, CabH = 2.8f, CabL = 3.4f;
-    private const float TrW = 2.5f, TrH = 3.0f, TrL = 9f;
-    private const float WheelR = 0.7f;
+    // Huge on purpose: the trailer is tall enough to plug an elevated gate opening (~y 5-11).
+    private const float CabW = 4f, CabH = 7f, CabL = 6f;
+    private const float TrW = 5f, TrH = 13f, TrL = 20f;
+    private const float WheelR = 1.6f;
 
     private Arena _arena = null!;
     private AnimatableBody3D _cab = null!, _trailer = null!;
@@ -76,21 +77,26 @@ public partial class Truck : Node3D
         _trailer.GlobalTransform = new Transform3D(BasisYaw(_trailerYaw), _trailerPos);
     }
 
-    // Choose the next destination: sometimes block a random gate, otherwise wander in the play area.
+    // Choose the next destination: usually go block a gate - preferring the one the pilot must clear
+    // next (adversarial) - otherwise wander the play area.
     private void PickTarget()
     {
-        _modeTimer = (float)GD.RandRange(6.0, 14.0);
         int gates = _arena.Gates.Count;
         if (gates > 1 && GD.Randf() < BlockChance)
         {
-            int idx = 1 + (int)(GD.Randi() % (uint)(gates - 1));   // a regular gate (not start/finish)
+            int next = _arena.NextGateIndex?.Invoke() ?? -1;
+            int idx = next >= 1 && next < gates            // block the pilot's next gate when racing
+                ? next
+                : 1 + (int)(GD.Randi() % (uint)(gates - 1));   // else a random regular gate
             Vector3 g = _arena.Gates[idx].GlobalPosition;
-            _target = new Vector3(g.X, 0f, g.Z);                   // park on the ground under it
+            _target = new Vector3(g.X, 0f, g.Z);           // park under it; the tall trailer plugs the hole
+            _modeTimer = (float)GD.RandRange(2.5, 4.5);     // re-home often so it chases your progress
         }
         else
         {
             Bounds(out Vector2 min, out Vector2 max);
             _target = new Vector3((float)GD.RandRange(min.X, max.X), 0f, (float)GD.RandRange(min.Y, max.Y));
+            _modeTimer = (float)GD.RandRange(5.0, 10.0);
         }
     }
 
