@@ -16,7 +16,8 @@ public partial class EditController : Node3D
     [Export] public float HighlightRadius = 5f;
     [Export] public float RotSpeed = 90f;
 
-    private const float PosStep = 0.5f, RotStep = 15f, SizeStep = 0.25f;
+    private const float PosStep = 0.25f, RotStep = 45f, SizeStep = 0.25f;   // 0.25 m grid, 45 deg cardinals
+    private const float Grid = 0.25f;
 
     private DroneController _ctrl = null!;
     private Camera3D _cam = null!;
@@ -63,8 +64,8 @@ public partial class EditController : Node3D
         AddChild(layer);
         _hint = new Label
         {
-            Text = "EDIT   E fly   WASD/Space/Shift move   wheel speed   C grab/drop   1-6 rotate   " +
-                   "G rock   T gate   K clone   F flip   V colour   [ ] size   Del delete   arrows nudge   Ctrl+Z undo",
+            Text = "EDIT   E fly   WASD/Space/Shift move   wheel speed   C grab (drop = snap + turn 45°)   " +
+                   "1-6 rotate 45°   G rock   T gate   K clone   F flip   V colour   [ ] size   Del delete   arrows nudge   Ctrl+Z undo",
             Position = new Vector2(40, 40),
             Visible = false,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -212,6 +213,12 @@ public partial class EditController : Node3D
         switch (key.Keycode)
         {
             case Key.C when !echo: GrabOrDrop(); break;
+            case Key.Key1 when _grabbed != null && !echo: StepRot(Vector3.Up, RotStep); break;      // yaw +45
+            case Key.Key2 when _grabbed != null && !echo: StepRot(Vector3.Up, -RotStep); break;     // yaw -45
+            case Key.Key3 when _grabbed != null && !echo: StepRot(Vector3.Right, RotStep); break;   // pitch +45
+            case Key.Key4 when _grabbed != null && !echo: StepRot(Vector3.Right, -RotStep); break;  // pitch -45
+            case Key.Key5 when _grabbed != null && !echo: StepRot(Vector3.Forward, RotStep); break; // roll +45
+            case Key.Key6 when _grabbed != null && !echo: StepRot(Vector3.Forward, -RotStep); break;// roll -45
             case Key.G when !echo: SpawnRock(); break;
             case Key.T when !echo: SpawnGate(); break;
             case Key.K when !echo: CloneFocused(); break;
@@ -262,10 +269,48 @@ public partial class EditController : Node3D
 
     // --- object actions ---
 
+    // Drop: snap to the 0.25 m grid and turn the object +45 deg (yaw), snapping to a cardinal angle -
+    // so re-grabbing and dropping the same object cycles it through the 8 cardinal orientations.
     private void GrabOrDrop()
     {
-        if (_grabbed != null) { _grabbed = null; Commit(); return; }   // drop + record
+        if (_grabbed != null) { SnapDrop(_grabbed); _grabbed = null; Commit(); return; }
         if (_hovered != null) Grab(_hovered);
+    }
+
+    private static float Snap(float v, float step) => Mathf.Round(v / step) * step;
+    private static Vector3 SnapPos(Vector3 p) => new(Snap(p.X, Grid), Snap(p.Y, Grid), Snap(p.Z, Grid));
+    private static Vector3 SnapDeg(Vector3 d) => new(Snap(d.X, RotStep), Snap(d.Y, RotStep), Snap(d.Z, RotStep));
+
+    private static Quaternion SnapQuat(Quaternion q)
+    {
+        Vector3 e = new Basis(q).GetEuler();
+        float s = Mathf.DegToRad(RotStep);
+        return Quaternion.FromEuler(new Vector3(Snap(e.X, s), Snap(e.Y, s), Snap(e.Z, s)));
+    }
+
+    private void SnapDrop(Node3D n)
+    {
+        if (n is PropNode pn)
+        {
+            pn.Data.Rot = SnapQuat((new Quaternion(Vector3.Up, Mathf.DegToRad(RotStep)) * pn.Data.Rot).Normalized());
+            pn.Data.Pos = SnapPos(pn.GlobalPosition);
+            pn.Refresh();
+        }
+        else
+        {
+            n.GlobalRotate(Vector3.Up, Mathf.DegToRad(RotStep));
+            n.GlobalRotationDegrees = SnapDeg(n.GlobalRotationDegrees);
+            n.GlobalPosition = SnapPos(n.GlobalPosition);
+        }
+    }
+
+    // A discrete 45 deg step of the grabbed object about a world axis (1-6 keys).
+    private void StepRot(Vector3 axis, float deg)
+    {
+        if (_grabbed == null) return;
+        float rad = Mathf.DegToRad(deg);
+        if (_grabbed is PropNode pn) { pn.Data.Rot = (new Quaternion(axis, rad) * pn.Data.Rot).Normalized(); pn.SetPoseKeepPos(pn.GlobalPosition); }
+        else _grabbed.GlobalRotate(axis, rad);
     }
 
     private void Grab(Node3D node)
@@ -403,33 +448,13 @@ public partial class EditController : Node3D
         return best;
     }
 
-    private void UpdatePropRotScale(PropNode pn, float delta)
+    // Continuous prop resize with [ ] while carrying (rotation is now discrete 45 deg steps via 1-6).
+    private void UpdatePropScale(PropNode pn, float delta)
     {
-        float a = Mathf.DegToRad(RotSpeed) * delta;
-        Quaternion q = pn.Data.Rot;
-        if (Input.IsKeyPressed(Key.Key1)) q *= new Quaternion(Vector3.Forward, a);
-        if (Input.IsKeyPressed(Key.Key2)) q *= new Quaternion(Vector3.Forward, -a);
-        if (Input.IsKeyPressed(Key.Key3)) q *= new Quaternion(Vector3.Right, a);
-        if (Input.IsKeyPressed(Key.Key4)) q *= new Quaternion(Vector3.Right, -a);
-        if (Input.IsKeyPressed(Key.Key5)) q *= new Quaternion(Vector3.Up, a);
-        if (Input.IsKeyPressed(Key.Key6)) q *= new Quaternion(Vector3.Up, -a);
-        pn.Data.Rot = q.Normalized();
-
         float s = 1f;
         if (Input.IsKeyPressed(Key.Bracketright)) s *= 1f + 1.5f * delta;
         if (Input.IsKeyPressed(Key.Bracketleft)) s *= 1f - 1.5f * delta;
         if (s != 1f) pn.Data.Scale = (pn.Data.Scale * s).Clamp(Vector3.One * 0.4f, Vector3.One * 40f);
-    }
-
-    private void RotateGrabbed(float delta)
-    {
-        float a = Mathf.DegToRad(RotSpeed) * delta;
-        if (Input.IsKeyPressed(Key.Key1)) _grabbed!.RotateObjectLocal(Vector3.Forward, a);
-        if (Input.IsKeyPressed(Key.Key2)) _grabbed!.RotateObjectLocal(Vector3.Forward, -a);
-        if (Input.IsKeyPressed(Key.Key3)) _grabbed!.RotateObjectLocal(Vector3.Right, a);
-        if (Input.IsKeyPressed(Key.Key4)) _grabbed!.RotateObjectLocal(Vector3.Right, -a);
-        if (Input.IsKeyPressed(Key.Key5)) _grabbed!.RotateObjectLocal(Vector3.Up, a);
-        if (Input.IsKeyPressed(Key.Key6)) _grabbed!.RotateObjectLocal(Vector3.Up, -a);
     }
 
     public override void _Process(double delta)
@@ -438,9 +463,9 @@ public partial class EditController : Node3D
 
         if (_grabbed != null)
         {
-            Vector3 pos = _cam.GlobalTransform * _grabLocalPos;
-            if (_grabbed is PropNode pn) { UpdatePropRotScale(pn, (float)delta); pn.SetPoseKeepPos(pos); }
-            else { _grabbed.GlobalPosition = pos; RotateGrabbed((float)delta); }
+            Vector3 pos = SnapPos(_cam.GlobalTransform * _grabLocalPos);   // snap to the 0.25 m grid while carrying
+            if (_grabbed is PropNode pn) { UpdatePropScale(pn, (float)delta); pn.SetPoseKeepPos(pos); }
+            else _grabbed.GlobalPosition = pos;
         }
         else
         {
