@@ -410,17 +410,20 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     private const string DevRelaunchPath = "user://dev_relaunch.txt";
 
-    // Debug R: save the current level, then spawn a detached helper that waits for THIS process to
-    // exit (so the C# assembly file unlocks), rebuilds, and relaunches Godot on the same level.
+    // Debug R: build the latest code first (blocks briefly - Godot doesn't lock its own assembly);
+    // if the build fails, stay in this session. On success, save the current level, then close this
+    // instance and let a tiny helper relaunch Godot once we've exited (so it opens cleanly).
     private void DevRebuildRelaunch()
     {
-        Persistence.WriteText(DevRelaunchPath, LevelStore.IdAt(_levelIndex));
         string proj = ProjectSettings.GlobalizePath("res://").TrimEnd('/');
+        int code = OS.Execute("powershell.exe", new[] { "-NoProfile", "-Command", $"dotnet build \"{proj}\"; exit $LASTEXITCODE" });
+        if (code != 0) { GD.PushWarning("dev rebuild failed - staying in the current build"); return; }
+
+        Persistence.WriteText(DevRelaunchPath, LevelStore.IdAt(_levelIndex));
         string godot = OS.GetExecutablePath();
         int pid = OS.GetProcessId();
-        string cmd = $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue; " +
-                     $"dotnet build \"{proj}\"; & \"{godot}\" --path \"{proj}\"";
-        OS.CreateProcess("powershell.exe", new[] { "-NoProfile", "-Command", cmd });
+        OS.CreateProcess("powershell.exe", new[] { "-NoProfile", "-Command",
+            $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue; & \"{godot}\" --path \"{proj}\"" });
         GetTree().Quit();
     }
 
