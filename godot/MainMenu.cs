@@ -43,10 +43,10 @@ public partial class MainMenu : MenuScreen
         VBoxContainer v = CenteredBox(out _);
 
         v.AddChild(new LogoCanvas { Style = 0, CustomMinimumSize = new Vector2(620, 130) });   // VibeDrone divider logo
-        var sub = UiTheme.Body("F P V   T I M E   T R I A L", UiTheme.TextDim, 13);
+        var sub = UiTheme.Body("F P V   T I M E   T R I A L", UiTheme.TextDim, 22);
         sub.HorizontalAlignment = HorizontalAlignment.Center;
         v.AddChild(sub);
-        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 30) });   // spacer
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 34) });   // spacer
 
         _buttons = new VBoxContainer();
         _buttons.AddThemeConstantOverride("separation", 10);
@@ -62,14 +62,15 @@ public partial class MainMenu : MenuScreen
         BuildConfirm();
     }
 
-    // A modal "Exit VibeDrone?" over a dimmed background, with Cancel / Exit side by side.
+    // A modal "Exit VibeDrone?" card that floats over the dimmed title screen, with Cancel / Exit.
     private void BuildConfirm()
     {
         _confirm = new Control { Theme = UiTheme.Get(), Visible = false };
         _confirm.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_confirm);
 
-        var dim = new ColorRect { Color = new Color(0, 0, 0, 0.55f), MouseFilter = Control.MouseFilterEnum.Stop };
+        // dim the whole title screen behind the card so it clearly sits on top of the menu
+        var dim = new ColorRect { Color = new Color(0.01f, 0.015f, 0.02f, 0.66f), MouseFilter = Control.MouseFilterEnum.Stop };
         dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _confirm.AddChild(dim);
 
@@ -77,24 +78,43 @@ public partial class MainMenu : MenuScreen
         center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _confirm.AddChild(center);
 
+        // a solid floating card (opaque, hairline border, soft drop shadow) - reads clearly over the
+        // dimmed menu rather than the theme's near-transparent frosted panel.
+        var card = new StyleBoxFlat { BgColor = new Color(0.10f, 0.115f, 0.14f) };
+        card.SetCornerRadiusAll(16);
+        card.CornerDetail = 8;
+        card.BorderColor = new Color(1, 1, 1, 0.10f);
+        card.SetBorderWidthAll(1);
+        card.ShadowColor = new Color(0, 0, 0, 0.5f);
+        card.ShadowSize = 26;
+
         var panel = new PanelContainer { Theme = UiTheme.Get() };
+        panel.AddThemeStyleboxOverride("panel", card);
         center.AddChild(panel);
 
         var margin = new MarginContainer();
-        foreach (var m in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
-            margin.AddThemeConstantOverride(m, 30);
+        margin.AddThemeConstantOverride("margin_left", 44);
+        margin.AddThemeConstantOverride("margin_right", 44);
+        margin.AddThemeConstantOverride("margin_top", 34);
+        margin.AddThemeConstantOverride("margin_bottom", 30);
         panel.AddChild(margin);
 
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", 20);
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(360, 0) };
+        box.AddThemeConstantOverride("separation", 8);
         margin.AddChild(box);
 
-        var q = UiTheme.Heading("Exit VibeDrone?", 22);
+        var q = UiTheme.Heading("Exit VibeDrone?", 24);
         q.HorizontalAlignment = HorizontalAlignment.Center;
         box.AddChild(q);
 
+        var note = UiTheme.Body("Your best laps are saved.", UiTheme.TextDim, 15);
+        note.HorizontalAlignment = HorizontalAlignment.Center;
+        box.AddChild(note);
+
+        box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 18) });   // spacer
+
         var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-        row.AddThemeConstantOverride("separation", 16);
+        row.AddThemeConstantOverride("separation", 14);
         box.AddChild(row);
 
         _cancelBtn = ConfirmButton("Cancel", CloseConfirm);
@@ -109,15 +129,22 @@ public partial class MainMenu : MenuScreen
 
     private static Button ConfirmButton(string text, System.Action onPressed)
     {
-        Button b = UiTheme.MenuItem(text, onPressed, 150f);
+        Button b = UiTheme.MenuItem(text, onPressed, 170f);
         b.Alignment = HorizontalAlignment.Center;
         return b;
+    }
+
+    // Keep the title menu visible behind the card, but drop its buttons out of keyboard focus.
+    private void SetMenuFocusable(bool on)
+    {
+        foreach (Node child in _buttons.GetChildren())
+            if (child is Button b) b.FocusMode = on ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
     }
 
     private void OpenConfirm()
     {
         _confirmOpen = true;
-        _buttons.Visible = false;          // hidden buttons drop out of keyboard focus
+        SetMenuFocusable(false);
         _confirm.Visible = true;
         _cancelBtn.CallDeferred(Control.MethodName.GrabFocus);   // default to the safe option
     }
@@ -126,7 +153,7 @@ public partial class MainMenu : MenuScreen
     {
         _confirmOpen = false;
         _confirm.Visible = false;
-        _buttons.Visible = true;
+        SetMenuFocusable(true);
         _first.CallDeferred(Control.MethodName.GrabFocus);
     }
 }
