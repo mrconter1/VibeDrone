@@ -34,14 +34,14 @@ public partial class ResultsCanvas : Control
         float tw = _cond.GetStringSize(title, HorizontalAlignment.Left, -1, 40).X;
         DrawString(_cond, new Vector2((w - tw) * 0.5f, 46), title, HorizontalAlignment.Left, -1, 40, White);
 
-        if (_rows.Length == 0) return;
+        int n = Mathf.Min(3, _rows.Length);   // podium: only ever the top three
+        if (n == 0) return;
 
-        // podium: a few rows, sized generously and centred vertically below the title
         float rowH = 104f;
-        float top = Mathf.Max(96f, (h - _rows.Length * rowH) * 0.5f + 24f);
+        float top = Mathf.Max(96f, (h - n * rowH) * 0.5f + 24f);
         float med = 24f;
 
-        for (int i = 0; i < _rows.Length; i++)
+        for (int i = 0; i < n; i++)
         {
             Row r = _rows[i];
             float y = top + i * rowH + rowH * 0.5f;
