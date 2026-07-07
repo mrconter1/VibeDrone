@@ -29,6 +29,14 @@ public partial class EditController : Node3D
     private Node3D? _hovered;                     // object under the reticle (highlighted)
     private Node3D? _grabbed;                     // object being carried
     private Vector3 _grabLocalPos;                // carried object position in camera-local space
+    private int _colorIdx;                        // cycles Palette on V
+
+    // natural rock/tree tints, cycled with V
+    private static readonly Color[] Palette =
+    {
+        new(0.42f, 0.42f, 0.44f), new(0.30f, 0.31f, 0.34f), new(0.52f, 0.44f, 0.34f),
+        new(0.68f, 0.60f, 0.44f), new(0.34f, 0.44f, 0.36f), new(0.55f, 0.35f, 0.30f),
+    };
 
     public void Setup(Camera3D droneCam, MotorAudio audio, Arena arena)
     { _droneCam = droneCam; _audio = audio; _arena = arena; }
@@ -44,7 +52,8 @@ public partial class EditController : Node3D
         AddChild(layer);
         _hint = new Label
         {
-            Text = "EDIT MODE   E fly drone   WASD/Space/Shift move   wheel speed   C grab/drop   1-6 rotate",
+            Text = "EDIT MODE   E fly   WASD/Space/Shift move   wheel speed   C grab/drop   1-6 rotate   " +
+                   "G rock   [ ] size   V colour   Del delete",
             Position = new Vector2(40, 40),
             Visible = false,
             MouseFilter = Control.MouseFilterEnum.Ignore,   // don't let it eat mouse events
@@ -104,7 +113,49 @@ public partial class EditController : Node3D
                 _grabbed.GlobalRotation = Vector3.Zero;  // reset carried object's orientation
                 GetViewport().SetInputAsHandled();
                 break;
+            case Key.G when _active:
+                SpawnRock();
+                GetViewport().SetInputAsHandled();
+                break;
+            case Key.Delete when _active:
+                DeleteFocused();
+                GetViewport().SetInputAsHandled();
+                break;
+            case Key.V when _active:
+                RecolorFocused();
+                GetViewport().SetInputAsHandled();
+                break;
         }
+    }
+
+    // G: spawn a rock ahead and immediately carry it (fly to place it, C to drop).
+    private void SpawnRock()
+    {
+        if (_grabbed != null) return;
+        Vector3 pos = _cam.GlobalPosition - _cam.GlobalBasis.Z * 15f;
+        PropNode node = _arena.AddProp(pos);
+        _grabbed = node;
+        _grabLocalPos = _cam.GlobalTransform.AffineInverse() * node.GlobalPosition;
+    }
+
+    // Delete the focused prop (gates can't be deleted). Persists the level.
+    private void DeleteFocused()
+    {
+        if ((_grabbed ?? _hovered) is not PropNode pn) return;
+        if (_grabbed == pn) _grabbed = null;
+        if (_hovered == pn) _hovered = null;
+        _highlight.Visible = false;
+        _arena.RemoveProp(pn);
+        _arena.SaveEdits();
+    }
+
+    // V: cycle the focused prop's colour.
+    private void RecolorFocused()
+    {
+        if ((_grabbed ?? _hovered) is not PropNode pn) return;
+        _colorIdx = (_colorIdx + 1) % Palette.Length;
+        pn.SetColor(Palette[_colorIdx]);
+        if (_grabbed == null) _arena.SaveEdits();   // hovered edit is immediate; carried saves on drop
     }
 
     private void Toggle()
@@ -167,6 +218,25 @@ public partial class EditController : Node3D
         return best;
     }
 
+    // Prop rotation (accumulated into the quaternion so non-uniform scale never shears) + [ ] resize.
+    private void UpdatePropRotScale(PropNode pn, float delta)
+    {
+        float a = Mathf.DegToRad(RotSpeed) * delta;
+        Quaternion q = pn.Data.Rot;
+        if (Input.IsKeyPressed(Key.Key1)) q *= new Quaternion(Vector3.Forward, a);
+        if (Input.IsKeyPressed(Key.Key2)) q *= new Quaternion(Vector3.Forward, -a);
+        if (Input.IsKeyPressed(Key.Key3)) q *= new Quaternion(Vector3.Right, a);
+        if (Input.IsKeyPressed(Key.Key4)) q *= new Quaternion(Vector3.Right, -a);
+        if (Input.IsKeyPressed(Key.Key5)) q *= new Quaternion(Vector3.Up, a);
+        if (Input.IsKeyPressed(Key.Key6)) q *= new Quaternion(Vector3.Up, -a);
+        pn.Data.Rot = q.Normalized();
+
+        float s = 1f;
+        if (Input.IsKeyPressed(Key.Bracketright)) s *= 1f + 1.5f * delta;   // ] bigger
+        if (Input.IsKeyPressed(Key.Bracketleft)) s *= 1f - 1.5f * delta;    // [ smaller
+        if (s != 1f) pn.Data.Scale = (pn.Data.Scale * s).Clamp(Vector3.One * 0.4f, Vector3.One * 40f);
+    }
+
     private void RotateGrabbed(float delta)
     {
         if (_grabbed == null) return;
@@ -185,8 +255,17 @@ public partial class EditController : Node3D
 
         if (_grabbed != null)
         {
-            _grabbed.GlobalPosition = _cam.GlobalTransform * _grabLocalPos;   // follow camera pos, keep orientation
-            RotateGrabbed((float)delta);                                     // 1-6 spin it
+            Vector3 pos = _cam.GlobalTransform * _grabLocalPos;              // follow camera position
+            if (_grabbed is PropNode pn)
+            {
+                UpdatePropRotScale(pn, (float)delta);                        // 1-6 rotate, [ ] resize
+                pn.SetPoseKeepPos(pos);                                      // basis from data, no shear
+            }
+            else
+            {
+                _grabbed.GlobalPosition = pos;
+                RotateGrabbed((float)delta);                                 // gates: 1-6 spin it
+            }
         }
         else
         {

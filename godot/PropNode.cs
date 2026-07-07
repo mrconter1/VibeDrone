@@ -30,6 +30,13 @@ public partial class PropNode : Node3D
         Transform = new Transform3D(new Basis(Data.Rot).Scaled(Data.Scale), Data.Pos);
     }
 
+    // Recolour without touching the transform (used while carrying, where pos is camera-driven).
+    public void SetColor(Color c) { Data.Color = c; _mat.AlbedoColor = c; }
+
+    // Set the basis (rotation + scale) from Data while keeping the given world position.
+    public void SetPoseKeepPos(Vector3 worldPos) =>
+        GlobalTransform = new Transform3D(new Basis(Data.Rot).Scaled(Data.Scale), worldPos);
+
     // Pull the current node transform back into Data (used after an edit-mode move).
     public void CaptureTransform()
     {
