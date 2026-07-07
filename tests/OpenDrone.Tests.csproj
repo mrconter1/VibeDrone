@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Plain .NET test project. It compiles the Godot-free game logic (FlightModel, RaceLogic)
-       straight from source, so the tests need no Godot engine and run under `dotnet test`. -->
+  <!-- Plain .NET test project. It compiles the game's engine-independent logic straight from source
+       and references GodotSharp (managed math types only - Vector3/Quaternion/Basis/Color work
+       without the engine), so the tests run under `dotnet test` with no Godot runtime. -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -14,9 +15,12 @@
     <Compile Include="..\godot\RaceState.cs" />
     <Compile Include="..\godot\EditHistory.cs" />
     <Compile Include="..\godot\LevelDto.cs" />
+    <Compile Include="..\godot\Level.cs" />
+    <Compile Include="..\godot\TrackBuilder.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="GodotSharp" Version="4.3.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
