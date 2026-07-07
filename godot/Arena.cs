@@ -11,7 +11,6 @@ public partial class Arena : Node3D
     private readonly List<PropNode> _props = new();
     private Level _level = null!;
     private ShaderMaterial _groundMat = null!;
-    private Truck _truck = null!;
 
     public Level CurrentLevel => _level;
     public string LevelName => _level?.Name ?? "";
@@ -24,18 +23,11 @@ public partial class Arena : Node3D
     // pass-through triggers.
     public event System.Action? GatesChanged;
 
-    // Set by the controller: the gate index the pilot must clear next (0 = finish, -1 = not racing).
-    // The truck uses it to block the pilot's path.
-    public System.Func<int>? NextGateIndex;
-
     public int GateIndexOf(Node3D n) => _gates.IndexOf(n);
 
     public override void _Ready()
     {
         BuildWorld();   // world only; a Level is loaded next by the controller
-        _truck = new Truck();
-        _truck.Setup(this);
-        AddChild(_truck);   // wandering obstacle; repositioned per level in LoadLevel
     }
 
     // Tear down the current gates/props and build the given level (gates + props + ground colour).
@@ -56,7 +48,6 @@ public partial class Arena : Node3D
             _props.Add(node);
         }
         _groundMat.SetShaderParameter("base_color", lvl.Ground.Color);
-        _truck?.Reset();   // drop the truck back into the (new) play area
         GatesChanged?.Invoke();
     }
 
