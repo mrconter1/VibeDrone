@@ -145,8 +145,10 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         AddChild(_pause);
 
         _coord = new ScreenCoordinator(this, GetTree(), GetViewport(), _cam,
-            _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam);
+            _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam, _osd);
         _coord.ApplyAA();   // MSAA + FXAA (fixes edge/checker shimmer)
+
+        AddChild(new CursorAutoHide());   // hide the menu cursor until the mouse moves, then after idle
 
         _edit = new EditController();
         _edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)

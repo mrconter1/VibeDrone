@@ -27,17 +27,18 @@ public sealed class ScreenCoordinator
     private readonly HelpOverlay _help;
     private readonly MenuBackdrop _backdrop;
     private readonly MenuCamera _menuCam;
+    private readonly Hud _hud;
 
     private Screen _screen = Screen.Main;
     private Screen _return = Screen.Main;   // where Levels/Settings/Help back out to
 
     public ScreenCoordinator(IGame game, SceneTree tree, Viewport vp, Camera3D droneCam,
         MainMenu main, LevelSelect levels, SettingsMenu settings, PauseMenu pause, HelpOverlay help,
-        MenuBackdrop backdrop, MenuCamera menuCam)
+        MenuBackdrop backdrop, MenuCamera menuCam, Hud hud)
     {
         _game = game; _tree = tree; _vp = vp; _droneCam = droneCam;
         _main = main; _levels = levels; _settings = settings; _pause = pause; _help = help;
-        _backdrop = backdrop; _menuCam = menuCam;
+        _backdrop = backdrop; _menuCam = menuCam; _hud = hud;
     }
 
     public bool MenuActive => _screen is Screen.Main or Screen.Levels or Screen.Settings;
@@ -55,12 +56,14 @@ public sealed class ScreenCoordinator
         bool fullScreenMenu = s is Screen.Main or Screen.Levels or Screen.Settings;
         _backdrop.SetActive(fullScreenMenu);
         _menuCam.Active = fullScreenMenu;
+        _hud.Visible = !fullScreenMenu;   // no stale race HUD behind the blurred title/menus
         ApplyMenuSsaa(fullScreenMenu);
         if (fullScreenMenu) _menuCam.MakeCurrent();
         else if (s == Screen.None) _droneCam.MakeCurrent();   // Pause/Help keep the (frozen) drone view
 
         _tree.Paused = s != Screen.None;
-        Input.MouseMode = s == Screen.None ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+        // gameplay captures the cursor; menus start with it hidden (CursorAutoHide reveals it on move)
+        Input.MouseMode = s == Screen.None ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Hidden;
     }
 
     // --- navigation verbs (called by the menus via DroneController) ---
