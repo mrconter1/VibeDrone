@@ -79,11 +79,12 @@ public partial class MainMenu : MenuScreen
         Button b = UiTheme.MenuItem(text, onPressed, MenuWidth);
         b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
         b.Alignment = HorizontalAlignment.Left;
+        const float shift = 46f;   // nudge the text column left of the pill centre
         foreach (string state in new[] { "normal", "hover", "pressed", "focus", "disabled" })
         {
             var sb = (StyleBox)UiTheme.Get().GetStylebox(state, "Button").Duplicate();
-            sb.ContentMarginLeft = pad;
-            sb.ContentMarginRight = pad;
+            sb.ContentMarginLeft = Mathf.Max(10f, pad - shift);
+            sb.ContentMarginRight = pad + shift;
             sb.ContentMarginTop = 10;
             sb.ContentMarginBottom = 10;
             b.AddThemeStyleboxOverride(state, sb);
