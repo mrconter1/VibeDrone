@@ -11,6 +11,7 @@ public partial class Arena : Node3D
     private readonly List<PropNode> _props = new();
     private Level _level = null!;
     private ShaderMaterial _groundMat = null!;
+    private Truck _truck = null!;
 
     public Level CurrentLevel => _level;
     public string LevelName => _level?.Name ?? "";
@@ -28,6 +29,9 @@ public partial class Arena : Node3D
     public override void _Ready()
     {
         BuildWorld();   // world only; a Level is loaded next by the controller
+        _truck = new Truck();
+        _truck.Setup(this);
+        AddChild(_truck);   // wandering obstacle; repositioned per level in LoadLevel
     }
 
     // Tear down the current gates/props and build the given level (gates + props + ground colour).
@@ -48,6 +52,7 @@ public partial class Arena : Node3D
             _props.Add(node);
         }
         _groundMat.SetShaderParameter("base_color", lvl.Ground.Color);
+        _truck?.Reset();   // drop the truck back into the (new) play area
         GatesChanged?.Invoke();
     }
 
