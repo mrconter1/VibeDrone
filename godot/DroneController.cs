@@ -73,6 +73,9 @@ public partial class DroneController : Node3D
         // prefer short GC pauses over throughput: fewer gen2 stalls = fewer missed frames
         GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
 
+        Config.Load();                                       // UI scale + blur mode preferences
+        GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
+
         _sessionLog = new SessionLog();
         AddChild(_sessionLog);
 
@@ -455,6 +458,17 @@ public partial class DroneController : Node3D
 
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
+
+    public string CycleBlur() => _backdrop.Cycle();   // main-menu B
+    public string BlurName => _backdrop.ModeName;
+
+    public float UiScale => Config.UiScale;
+    public void ApplyUiScale(float scale)
+    {
+        Config.UiScale = Mathf.Clamp(scale, 0.7f, 1.6f);
+        GetTree().Root.ContentScaleFactor = Config.UiScale;
+        Config.Save();
+    }
 
     // Wipe one track's saved records (from the Levels screen); reload if it's the active track.
     public void ClearRecords(int index)

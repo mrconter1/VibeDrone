@@ -78,15 +78,17 @@ $Noise = @(
     'PagedAllocator'
 )
 
-# Run Godot and echo its output minus the noise lines. Returns Godot's exit code.
+# Run Godot, printing its output to the console minus the noise lines. Returns the exit code only
+# (lines go to the host via Write-Host, so they don't leak into the function's return value).
 function Start-Godot([string[]]$GodotArgs) {
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'   # native stderr (via 2>&1) must not abort the script
     try {
         & $Godot @GodotArgs 2>&1 | ForEach-Object {
             $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
-            foreach ($p in $Noise) { if ($line -like "*$p*") { return } }
-            $line
+            $skip = $false
+            foreach ($p in $Noise) { if ($line -like "*$p*") { $skip = $true; break } }
+            if (-not $skip) { Write-Host $line }
         }
     } finally { $ErrorActionPreference = $prev }
     return $LASTEXITCODE
@@ -98,11 +100,15 @@ if ($Editor) {
     & $Godot -e --path $GodotDir
 } else {
     Write-Host "Launching game (Esc quit, R reset, Tab replay) ..." -ForegroundColor Green
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $code = Start-Godot @('--path', $GodotDir)
-    # The project defaults to the D3D12 backend (project.godot) to avoid the AMD Radeon 740M
-    # Vulkan startup crash. If D3D12 ever fails to start on some other GPU, retry once on Vulkan.
-    if ($code -ne 0) {
-        Write-Host "Godot exited with code $code - retrying on the Vulkan backend ..." -ForegroundColor Yellow
+    $sw.Stop()
+    # The project defaults to D3D12 (project.godot) to avoid the AMD Radeon 740M Vulkan startup
+    # crash. Only retry on Vulkan if D3D12 died almost immediately (a real startup crash) - a
+    # normal quit can exit non-zero because of the harmless D3D12 shutdown warning, and retrying
+    # then would relaunch the game after the player asked to exit.
+    if ($code -ne 0 -and $sw.Elapsed.TotalSeconds -lt 6) {
+        Write-Host "Godot crashed at startup (code $code) - retrying on the Vulkan backend ..." -ForegroundColor Yellow
         Start-Godot @('--rendering-driver', 'vulkan', '--path', $GodotDir) | Out-Null
     }
 }

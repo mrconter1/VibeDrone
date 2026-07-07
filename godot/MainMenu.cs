@@ -6,6 +6,7 @@ public partial class MainMenu : CanvasLayer
 {
     private DroneController _ctrl = null!;
     private Button _first = null!;
+    private Label _blur = null!;
 
     public void Setup(DroneController ctrl) => _ctrl = ctrl;
 
@@ -20,8 +21,20 @@ public partial class MainMenu : CanvasLayer
     public void Show(bool on)
     {
         Visible = on;
-        if (on) _first.CallDeferred(Control.MethodName.GrabFocus);
+        if (on) { _blur.Text = BlurText(_ctrl.BlurName); _first.CallDeferred(Control.MethodName.GrabFocus); }
     }
+
+    // B cycles the menu-blur technique (only from the title screen), for eyeballing which looks best.
+    public override void _Input(InputEvent ev)
+    {
+        if (Visible && ev is InputEventKey { Pressed: true, Keycode: Key.B })
+        {
+            _blur.Text = BlurText(_ctrl.CycleBlur());
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
+    private static string BlurText(string name) => $"BLUR   {name}      [B to cycle]";
 
     private void BuildUi()
     {
@@ -48,5 +61,11 @@ public partial class MainMenu : CanvasLayer
         v.AddChild(UiTheme.MenuItem("Levels", () => _ctrl.OpenLevels(fromPause: false)));
         v.AddChild(UiTheme.MenuItem("Settings", () => _ctrl.OpenSettings(fromPause: false)));
         v.AddChild(UiTheme.MenuItem("Exit", () => GetTree().Quit()));
+
+        // blur-technique readout, bottom-left
+        _blur = UiTheme.Body("", UiTheme.TextDim, 15);
+        _blur.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+        _blur.Position = new Vector2(28, -40);
+        root.AddChild(_blur);
     }
 }

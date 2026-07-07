@@ -65,6 +65,23 @@ public partial class SettingsMenu : CanvasLayer
         v.AddChild(UiTheme.Title("SETTINGS", 46));
         v.AddChild(new HSeparator());
 
+        // UI size
+        var uiHead = new HBoxContainer();
+        uiHead.AddChild(UiTheme.Body("UI size", UiTheme.TextDim, 15));
+        var uiReadout = UiTheme.Body("", UiTheme.Accent, 15);
+        uiReadout.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        uiReadout.HorizontalAlignment = HorizontalAlignment.Right;
+        uiHead.AddChild(uiReadout);
+        v.AddChild(uiHead);
+        var uiScale = new HSlider
+        {
+            MinValue = 0.8, MaxValue = 1.5, Step = 0.05, Value = _ctrl.UiScale,
+            CustomMinimumSize = new Vector2(440, 24), FocusMode = Control.FocusModeEnum.All,
+        };
+        uiScale.ValueChanged += val => { _ctrl.ApplyUiScale((float)val); uiReadout.Text = $"{val:0.00}×"; };
+        uiReadout.Text = $"{_ctrl.UiScale:0.00}×";
+        v.AddChild(uiScale);
+
         // master volume
         v.AddChild(UiTheme.Body("Master volume", UiTheme.TextDim, 15));
         var vol = new HSlider
