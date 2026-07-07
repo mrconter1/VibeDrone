@@ -67,7 +67,6 @@ public partial class DroneController : Node3D
     private SettingsMenu _settings = null!;
     private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
-    private BlurMenu _blurMenu = null!;
 
     public override void _Ready()
     {
@@ -132,9 +131,6 @@ public partial class DroneController : Node3D
         _pause = new PauseMenu();
         _pause.Setup(this);
         AddChild(_pause);
-        _blurMenu = new BlurMenu();
-        _blurMenu.Setup(this);
-        AddChild(_blurMenu);   // B toggles it over the full-screen menus
 
         var edit = new EditController();
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
@@ -465,10 +461,7 @@ public partial class DroneController : Node3D
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
 
-    // blur menu (B) toggles a live tuning panel over the full-screen menus
-    public bool MenuActive => _screen is Screen.Main or Screen.Levels or Screen.Settings;
-    public void ToggleBlurMenu() { if (MenuActive) _blurMenu.Toggle(); }
-    public void RefreshBackdrop() => _backdrop.Refresh();
+    private bool MenuActive => _screen is Screen.Main or Screen.Levels or Screen.Settings;
     public void RefreshSsaa() => ApplyMenuSsaa(MenuActive);
 
     // Render the 3D above native resolution and downscale (SSAA) while a menu is open. Downsampling

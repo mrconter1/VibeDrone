@@ -1,13 +1,14 @@
 using Godot;
 
-// Settings screen: master volume + HUD debug toggle (+ a shortcut to the advanced sound test).
-// Reachable from the main menu and the pause menu. Esc goes back. Built from UiTheme components.
+// Settings screen: UI size, master volume, graphics (MSAA / FXAA / menu supersample), HUD debug,
+// and the advanced sound test. Reachable from the main menu and the pause menu. Esc/Space go back.
+// The panel auto-fits its contents so it never overflows at any UI scale.
 public partial class SettingsMenu : CanvasLayer
 {
     private DroneController _ctrl = null!;
     private MotorAudio _audio = null!;
     private SoundMenu _sound = null!;
-    private Button _first = null!, _debugBtn = null!;
+    private Button _first = null!, _debug = null!, _msaa = null!, _fxaa = null!, _ssaa = null!;
 
     public void Setup(DroneController ctrl, MotorAudio audio, SoundMenu sound)
     {
@@ -25,7 +26,7 @@ public partial class SettingsMenu : CanvasLayer
     public void Show(bool on)
     {
         Visible = on;
-        if (on) { _debugBtn.Text = DebugLabel(); _first.CallDeferred(Control.MethodName.GrabFocus); }
+        if (on) { _debug.Text = DebugLabel(); _first.CallDeferred(Control.MethodName.GrabFocus); }
     }
 
     public override void _Input(InputEvent ev)
@@ -48,67 +49,95 @@ public partial class SettingsMenu : CanvasLayer
         center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         root.AddChild(center);
 
-        var panel = UiTheme.Panel();
-        panel.CustomMinimumSize = new Vector2(600, 430);
+        var panel = new PanelContainer { Theme = UiTheme.Get() };
         center.AddChild(panel);
 
         var pad = new MarginContainer();
-        pad.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         foreach (var m in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
             pad.AddThemeConstantOverride(m, 32);
         panel.AddChild(pad);
 
-        var v = new VBoxContainer();
-        v.AddThemeConstantOverride("separation", 16);
+        var v = new VBoxContainer { CustomMinimumSize = new Vector2(500, 0) };
+        v.AddThemeConstantOverride("separation", 12);
         pad.AddChild(v);
 
         v.AddChild(UiTheme.Title("SETTINGS", 46));
         v.AddChild(new HSeparator());
 
         // UI size
-        var uiHead = new HBoxContainer();
-        uiHead.AddChild(UiTheme.Body("UI size", UiTheme.TextDim, 15));
-        var uiReadout = UiTheme.Body("", UiTheme.Accent, 15);
-        uiReadout.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        uiReadout.HorizontalAlignment = HorizontalAlignment.Right;
-        uiHead.AddChild(uiReadout);
-        v.AddChild(uiHead);
-        var uiScale = new HSlider
-        {
-            MinValue = 0.8, MaxValue = 1.5, Step = 0.05, Value = _ctrl.UiScale,
-            CustomMinimumSize = new Vector2(440, 24), FocusMode = Control.FocusModeEnum.All,
-        };
+        v.AddChild(Row("UI size", out Label uiReadout));
+        var uiScale = Slider(0.8, 1.5, 0.05, _ctrl.UiScale);
         uiScale.ValueChanged += val => { _ctrl.ApplyUiScale((float)val); uiReadout.Text = $"{val:0.00}×"; };
         uiReadout.Text = $"{_ctrl.UiScale:0.00}×";
         v.AddChild(uiScale);
 
         // master volume
         v.AddChild(UiTheme.Body("Master volume", UiTheme.TextDim, 15));
-        var vol = new HSlider
-        {
-            MinValue = -40, MaxValue = 0, Step = 1, Value = MotorAudio.DefMasterDb,
-            CustomMinimumSize = new Vector2(440, 24), FocusMode = Control.FocusModeEnum.All,
-        };
+        var vol = Slider(-40, 0, 1, MotorAudio.DefMasterDb);
         vol.ValueChanged += val => _audio.SetMasterDb((float)val);
-        _first = null!;   // slider isn't a Button; focus the debug button first instead
         v.AddChild(vol);
 
-        // HUD debug toggle
-        _debugBtn = UiTheme.MenuItem(DebugLabel(), () =>
-        {
-            _ctrl.SetShowDebug(!_ctrl.ShowDebug);
-            _debugBtn.Text = DebugLabel();
-        }, 440f);
-        v.AddChild(_debugBtn);
-        _first = _debugBtn;
+        v.AddChild(new HSeparator());
+        v.AddChild(UiTheme.Body("Graphics", UiTheme.TextDim, 15));
+        _msaa = UiTheme.MenuItem(MsaaLabel(), CycleMsaa, 440f);
+        v.AddChild(_msaa);
+        _fxaa = UiTheme.MenuItem(FxaaLabel(), ToggleFxaa, 440f);
+        v.AddChild(_fxaa);
+        _ssaa = UiTheme.MenuItem(SsaaLabel(), ToggleSsaa, 440f);
+        v.AddChild(_ssaa);
+        _first = _msaa;
 
-        // advanced sound test (the existing dev panel)
+        v.AddChild(new HSeparator());
+        _debug = UiTheme.MenuItem(DebugLabel(), () => { _ctrl.SetShowDebug(!_ctrl.ShowDebug); _debug.Text = DebugLabel(); }, 440f);
+        v.AddChild(_debug);
         v.AddChild(UiTheme.MenuItem("Advanced sound test", () => { _ctrl.MenuBack(); _sound.SetOpen(true); }, 440f));
 
-        v.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
+        v.AddChild(new HSeparator());
         v.AddChild(UiTheme.MenuItem("‹  Back", () => _ctrl.MenuBack(), 200f));
-        v.AddChild(UiTheme.Body("Esc / Space  back", UiTheme.TextDim, 15));
+        v.AddChild(UiTheme.Body("Esc / Space  back", UiTheme.TextDim, 14));
+    }
+
+    private void CycleMsaa()
+    {
+        Config.Msaa = Config.Msaa switch { 0 => 2, 2 => 4, 4 => 8, _ => 0 };
+        _ctrl.ApplyAA(); Config.Save();
+        _msaa.Text = MsaaLabel();
+    }
+
+    private void ToggleFxaa()
+    {
+        Config.Fxaa = !Config.Fxaa;
+        _ctrl.ApplyAA(); Config.Save();
+        _fxaa.Text = FxaaLabel();
+    }
+
+    private void ToggleSsaa()
+    {
+        Config.MenuSsaa = !Config.MenuSsaa;
+        _ctrl.RefreshSsaa(); Config.Save();
+        _ssaa.Text = SsaaLabel();
     }
 
     private string DebugLabel() => "HUD debug overlay:   " + (_ctrl.ShowDebug ? "ON" : "OFF");
+    private string MsaaLabel() => "Anti-aliasing (MSAA):   " + (Config.Msaa == 0 ? "OFF" : $"{Config.Msaa}×");
+    private string FxaaLabel() => "Smoothing (FXAA):   " + (Config.Fxaa ? "ON" : "OFF");
+    private string SsaaLabel() => "Menu supersampling:   " + (Config.MenuSsaa ? "ON" : "OFF");
+
+    // A "name .......... value" header row with a right-aligned accent readout.
+    private static HBoxContainer Row(string name, out Label readout)
+    {
+        var h = new HBoxContainer();
+        h.AddChild(UiTheme.Body(name, UiTheme.TextDim, 15));
+        readout = UiTheme.Body("", UiTheme.Accent, 15);
+        readout.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        readout.HorizontalAlignment = HorizontalAlignment.Right;
+        h.AddChild(readout);
+        return h;
+    }
+
+    private static HSlider Slider(double min, double max, double step, double value) => new()
+    {
+        MinValue = min, MaxValue = max, Step = step, Value = value,
+        CustomMinimumSize = new Vector2(440, 24), FocusMode = Control.FocusModeEnum.All,
+    };
 }

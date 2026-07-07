@@ -48,11 +48,5 @@ public partial class MainMenu : CanvasLayer
         v.AddChild(UiTheme.MenuItem("Levels", () => _ctrl.OpenLevels(fromPause: false)));
         v.AddChild(UiTheme.MenuItem("Settings", () => _ctrl.OpenSettings(fromPause: false)));
         v.AddChild(UiTheme.MenuItem("Exit", () => GetTree().Quit()));
-
-        // hint: the blur tuning menu
-        var hint = UiTheme.Body("B  blur & AA settings", UiTheme.TextDim, 15);
-        hint.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
-        hint.Position = new Vector2(28, -40);
-        root.AddChild(hint);
     }
 }

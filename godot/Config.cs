@@ -8,15 +8,15 @@ public static class Config
 
     public static float UiScale = 1.0f;          // whole-UI scale factor
 
-    // menu backdrop blur
+    // menu backdrop blur (tuned defaults; no longer user-editable in-game)
     public static int BlurType = 1;              // 0 Gaussian, 1 Kawase (expanding), 2 Box
-    public static float BlurRadius = 4.5f;       // per-pass radius (px)
-    public static int BlurIterations = 3;        // how many H+V passes (wider + smoother)
-    public static float BlurTint = 0.5f;         // darkening toward the tint colour
-    public static float BlurVignette = 0.5f;
+    public static float BlurRadius = 2.0f;       // per-pass radius (px)
+    public static int BlurIterations = 5;        // how many H+V passes (wider + smoother)
+    public static float BlurTint = 0.55f;        // darkening toward the tint colour
+    public static float BlurVignette = 0.60f;
 
-    // anti-aliasing (whole game)
-    public static int Msaa = 4;                  // 0 / 2 / 4 / 8  (MSAA 3D samples)
+    // anti-aliasing (whole game) - exposed in Settings
+    public static int Msaa = 8;                  // 0 / 2 / 4 / 8  (MSAA 3D samples)
     public static bool Fxaa = true;              // post AA, smooths shader aliasing (checker flag)
     public static bool MenuSsaa = true;          // supersample the 3D while a menu is open (kills orbit shimmer)
 
