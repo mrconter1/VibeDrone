@@ -52,14 +52,23 @@ public partial class MainMenu : MenuScreen
         _buttons.AddThemeConstantOverride("separation", 10);
         v.AddChild(_buttons);
 
-        _first = UiTheme.MenuItem("Start", () => Ctrl.StartGame());
+        _first = MainItem("Start", () => Ctrl.StartGame());
         _buttons.AddChild(_first);
-        _buttons.AddChild(UiTheme.MenuItem("Levels", () => Ctrl.OpenLevels(fromPause: false)));
-        _buttons.AddChild(UiTheme.MenuItem("Create", () => Ctrl.CreateLevel()));
-        _buttons.AddChild(UiTheme.MenuItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
-        _buttons.AddChild(UiTheme.MenuItem("Exit", OpenConfirm));
+        _buttons.AddChild(MainItem("Levels", () => Ctrl.OpenLevels(fromPause: false)));
+        _buttons.AddChild(MainItem("Create", () => Ctrl.CreateLevel()));
+        _buttons.AddChild(MainItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
+        _buttons.AddChild(MainItem("Exit", OpenConfirm));
 
         BuildConfirm();
+    }
+
+    // A title-menu item: fixed width so the column's left edges line up, but centered on screen
+    // (ShrinkCenter) rather than stretched full width, so the left-aligned text sits near centre.
+    private Button MainItem(string text, System.Action onPressed)
+    {
+        Button b = UiTheme.MenuItem(text, onPressed, 190f);
+        b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        return b;
     }
 
     // A modal "Exit VibeDrone?" card that floats over the dimmed title screen, with Cancel / Exit.
@@ -117,8 +126,8 @@ public partial class MainMenu : MenuScreen
         row.AddThemeConstantOverride("separation", 14);
         box.AddChild(row);
 
-        _cancelBtn = ConfirmButton("Cancel", CloseConfirm);
-        _exitBtn = ConfirmButton("Exit", () => GetTree().Quit());
+        _cancelBtn = ConfirmButton("No", CloseConfirm);
+        _exitBtn = ConfirmButton("Yes", () => GetTree().Quit());
         row.AddChild(_cancelBtn);
         row.AddChild(_exitBtn);
 
