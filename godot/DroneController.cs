@@ -63,7 +63,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
     private LogoMenu _logoMenu = null!;
-    private LoadingScreen _loading = null!;
 
     public override void _Ready()
     {
@@ -133,8 +132,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         AddChild(_pause);
         _logoMenu = new LogoMenu();
         AddChild(_logoMenu);   // L on the title screen opens the logo browser
-        _loading = new LoadingScreen();
-        AddChild(_loading);    // startup screen (played on a fresh boot to the title)
 
         _coord = new ScreenCoordinator(this, GetTree(), GetViewport(), _cam,
             _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam);
@@ -155,8 +152,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         else                                             // fresh boot, or reload to the title screen
         {
             SetLevelIndex(0);
-            _coord.OpenMain();
-            if (devLevel != "MAIN") _loading.Begin();    // play the startup screen (not on a dev reload)
+            _coord.OpenMain();   // the engine boot splash (boot.png) covers load; straight to the title
         }
     }
 
