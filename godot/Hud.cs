@@ -7,7 +7,7 @@ public partial class Hud : Control
 {
     public float Speed, Alt, Throttle, RollDeg, PitchDeg, TimeSec, Fov, Fps;
     public string Mode = "LIVE", Sound = "OFF";
-    public bool ShowDebug;
+    public bool ShowDebug, DevReload;
 
     public float LapTime, LastLap, BestLap;
     public string RaceStatus = "", Ranks = "", LevelName = "";
@@ -82,7 +82,11 @@ public partial class Hud : Control
 
         // debug overlay (opt-in via Esc menu)
         if (ShowDebug)
-            Text(40, sz.Y - 40, $"[{Mode}]  {Fps:0} FPS   FOV {Fov:0}   SND {Sound}   t {TimeSec:0.0}s   R rebuild+relaunch", 15, dim);
+        {
+            string s = $"[{Mode}]  {Fps:0} FPS   FOV {Fov:0}   SND {Sound}   t {TimeSec:0.0}s";
+            if (DevReload) s += "   R rebuild+relaunch";
+            Text(40, sz.Y - 40, s, 15, dim);
+        }
     }
 
     private static string FmtTime(float t)

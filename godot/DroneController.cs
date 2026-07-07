@@ -47,6 +47,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private float _armSettle;      // time armed; input is ignored until it settles
     private bool _gateHit;         // drone touched a gate bar this frame
     private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
+    private bool _devSupervised;   // launched under StartDebug -> debug R hot-reloads
 
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
@@ -69,6 +70,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
         Config.Load();                                       // UI scale + blur + AA preferences
         LegacyMigration.Run();                               // old index-keyed records -> stable-id files
+        _devSupervised = OS.GetEnvironment("OPENDRONE_DEV") == "1";   // StartDebug sets this
         GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
 
         _sessionLog = new SessionLog();
@@ -166,7 +168,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
         {
-            if (_showDebug) DevRebuildRelaunch();   // dev hot-reload: rebuild + relaunch this level
+            if (_showDebug && _devSupervised) RequestDevReload();   // hot-reload under StartDebug
             else { _sessionLog.Mark("race start"); StartRace(); }
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.H })
@@ -410,20 +412,11 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     private const string DevRelaunchPath = "user://dev_relaunch.txt";
 
-    // Debug R: build the latest code first (blocks briefly - Godot doesn't lock its own assembly);
-    // if the build fails, stay in this session. On success, save the current level, then close this
-    // instance and let a tiny helper relaunch Godot once we've exited (so it opens cleanly).
-    private void DevRebuildRelaunch()
+    // Debug R (only under the StartDebug supervisor): save the level and quit. The supervisor sees
+    // the marker, rebuilds the latest code, and relaunches Godot, which resumes this level.
+    private void RequestDevReload()
     {
-        string proj = ProjectSettings.GlobalizePath("res://").TrimEnd('/');
-        int code = OS.Execute("powershell.exe", new[] { "-NoProfile", "-Command", $"dotnet build \"{proj}\"; exit $LASTEXITCODE" });
-        if (code != 0) { GD.PushWarning("dev rebuild failed - staying in the current build"); return; }
-
         Persistence.WriteText(DevRelaunchPath, LevelStore.IdAt(_levelIndex));
-        string godot = OS.GetExecutablePath();
-        int pid = OS.GetProcessId();
-        OS.CreateProcess("powershell.exe", new[] { "-NoProfile", "-Command",
-            $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue; & \"{godot}\" --path \"{proj}\"" });
         GetTree().Quit();
     }
 
@@ -505,6 +498,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _osd.Fps = (float)Engine.GetFramesPerSecond();
         _osd.Sound = _audio.CurrentName;
         _osd.ShowDebug = _showDebug;
+        _osd.DevReload = _devSupervised;
         int regular = _arena.GateTriggers.Count - 1;
         _osd.LapTime = _race.LapTime;
         _osd.LastLap = _recorder.LastLap;
