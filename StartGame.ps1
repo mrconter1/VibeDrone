@@ -14,7 +14,8 @@
 .NOTES
     The project defaults to the D3D12 backend on Windows (project.godot) to avoid the
     AMD Radeon 740M Vulkan startup crash. If D3D12 fails to start, the script retries
-    once on Vulkan.
+    once on Vulkan. A couple of harmless D3D12 driver log lines (PSO-cache note, exit-time
+    PagedAllocator warning) are filtered from the console; all other output is shown.
 #>
 [CmdletBinding()]
 param(
@@ -67,18 +68,41 @@ if (-not $NoBuild -and ($Build -or (Test-BuildStale))) {
     Write-Host "C# unchanged - skipping build." -ForegroundColor DarkGray
 }
 
+# Known-benign D3D12 driver chatter (startup PSO note + shutdown buffer-cleanup warning).
+# These are engine/driver rough edges in Godot 4.3's D3D12 backend, not game problems, so we
+# drop them from the console while leaving every other line (including real errors) visible.
+$Noise = @(
+    'PSO caching is not implemented',
+    'pipeline_cache_create',
+    'Pages in use exist at exit',
+    'PagedAllocator'
+)
+
+# Run Godot and echo its output minus the noise lines. Returns Godot's exit code.
+function Start-Godot([string[]]$GodotArgs) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'   # native stderr (via 2>&1) must not abort the script
+    try {
+        & $Godot @GodotArgs 2>&1 | ForEach-Object {
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
+            foreach ($p in $Noise) { if ($line -like "*$p*") { return } }
+            $line
+        }
+    } finally { $ErrorActionPreference = $prev }
+    return $LASTEXITCODE
+}
+
 # 3. launch
 if ($Editor) {
     Write-Host "Opening editor ..." -ForegroundColor Green
     & $Godot -e --path $GodotDir
 } else {
     Write-Host "Launching game (Esc quit, R reset, Tab replay) ..." -ForegroundColor Green
-    & $Godot --path $GodotDir
-    # The project now defaults to the D3D12 backend (project.godot) to avoid the AMD
-    # Radeon 740M Vulkan startup crash. If D3D12 ever fails to start on some other GPU,
-    # retry once on Vulkan as a fallback.
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Godot exited with code $LASTEXITCODE - retrying on the Vulkan backend ..." -ForegroundColor Yellow
-        & $Godot --rendering-driver vulkan --path $GodotDir
+    $code = Start-Godot @('--path', $GodotDir)
+    # The project defaults to the D3D12 backend (project.godot) to avoid the AMD Radeon 740M
+    # Vulkan startup crash. If D3D12 ever fails to start on some other GPU, retry once on Vulkan.
+    if ($code -ne 0) {
+        Write-Host "Godot exited with code $code - retrying on the Vulkan backend ..." -ForegroundColor Yellow
+        Start-Godot @('--rendering-driver', 'vulkan', '--path', $GodotDir) | Out-Null
     }
 }
