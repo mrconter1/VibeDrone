@@ -56,7 +56,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private SettingsMenu _settings = null!;
     private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
-    private LogoMenu _logoMenu = null!;
     private SoundMenu _sound = null!;
 
     public override void _Ready()
@@ -144,8 +143,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _pause = new PauseMenu();
         _pause.Setup(this);
         AddChild(_pause);
-        _logoMenu = new LogoMenu();
-        AddChild(_logoMenu);   // L on the title screen opens the logo browser
 
         _coord = new ScreenCoordinator(this, GetTree(), GetViewport(), _cam,
             _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam);
@@ -370,8 +367,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // --- menu navigation: thin delegators to the ScreenCoordinator (called by the menu screens) ---
     public void StartGame() => _coord.StartGame();
     public void OpenMain() => _coord.OpenMain();
-    public void OpenLogos() => _logoMenu.Toggle();        // main-menu L (wordmark logos)
-    public void OpenIcons() => _logoMenu.ToggleIcons();   // main-menu I (square app icons)
     public void ResumeGame() => _coord.ResumeGame();
     public void OpenPause() => _coord.OpenPause();
     public void OpenHelp() => _coord.OpenHelp();

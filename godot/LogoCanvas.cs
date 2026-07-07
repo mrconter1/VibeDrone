@@ -6,9 +6,6 @@ using Godot;
 // the divider's thickness / length.
 public partial class LogoCanvas : Control
 {
-    public static readonly string[] Names = { "Divider", "Divider Thick", "Divider Long", "Divider Short" };
-    public const int Count = 4;
-
     public int Style;
 
     private static readonly Color White = new(0.95f, 0.96f, 0.98f);
