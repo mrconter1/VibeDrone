@@ -35,8 +35,11 @@ public partial class ResultsCanvas : Control
         DrawString(_cond, new Vector2((w - tw) * 0.5f, 46), title, HorizontalAlignment.Left, -1, 40, White);
 
         if (_rows.Length == 0) return;
-        const float top = 84f, bottom = 20f;
-        float rowH = (h - top - bottom) / _rows.Length;
+
+        // podium: a few rows, sized generously and centred vertically below the title
+        float rowH = 104f;
+        float top = Mathf.Max(96f, (h - _rows.Length * rowH) * 0.5f + 24f);
+        float med = 24f;
 
         for (int i = 0; i < _rows.Length; i++)
         {
@@ -45,24 +48,25 @@ public partial class ResultsCanvas : Control
 
             // medal + rank
             Color medal = i == 0 ? Gold : i == 1 ? Silver : i == 2 ? Bronze : new Color(1, 1, 1, 0.18f);
-            DrawCircle(new Vector2(38, y), 15f, medal);
+            DrawCircle(new Vector2(52, y), med, medal);
             string rank = (i + 1).ToString();
-            float rw = _reg.GetStringSize(rank, HorizontalAlignment.Left, -1, 18).X;
-            DrawString(_reg, new Vector2(38 - rw * 0.5f, y + 6), rank, HorizontalAlignment.Left, -1, 18, new Color(0.05f, 0.06f, 0.08f));
+            float rw = _reg.GetStringSize(rank, HorizontalAlignment.Left, -1, 26).X;
+            DrawString(_reg, new Vector2(52 - rw * 0.5f, y + 9), rank, HorizontalAlignment.Left, -1, 26, new Color(0.05f, 0.06f, 0.08f));
 
             // name + per-player scores
-            DrawString(_cond, new Vector2(70, y + 7), r.Name, HorizontalAlignment.Left, -1, 22, White);
-            DrawString(_reg, new Vector2(238, y + 6), $"P1 {r.A}   P2 {r.B}", HorizontalAlignment.Left, -1, 15, new Color(White, 0.5f));
+            DrawString(_cond, new Vector2(96, y + 10), r.Name, HorizontalAlignment.Left, -1, 34, White);
+            DrawString(_reg, new Vector2(96, y + 34), $"P1 {r.A}    P2 {r.B}", HorizontalAlignment.Left, -1, 16, new Color(White, 0.5f));
 
             // score bar (0..5)
-            float bx = 350, bw = w - bx - 74;
-            DrawRect(new Rect2(bx, y - 9, bw, 18), Track);
+            float bx = 340, bw = w - bx - 90;
+            float bh = 22f;
+            DrawRect(new Rect2(bx, y - bh * 0.5f, bw, bh), Track);
             float frac = Mathf.Clamp(r.Avg / 5f, 0f, 1f);
             Color fill = i == 0 ? Gold : Cyan;
-            DrawRect(new Rect2(bx, y - 9, bw * frac, 18), fill);
+            DrawRect(new Rect2(bx, y - bh * 0.5f, bw * frac, bh), fill);
 
             // average value
-            DrawString(_reg, new Vector2(w - 60, y + 7), r.Avg.ToString("0.0"), HorizontalAlignment.Left, -1, 20, White);
+            DrawString(_reg, new Vector2(w - 70, y + 9), r.Avg.ToString("0.0"), HorizontalAlignment.Left, -1, 26, White);
         }
     }
 }

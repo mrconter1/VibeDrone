@@ -98,7 +98,7 @@ public partial class LogoMenu : CanvasLayer
             rows.Add(new ResultsCanvas.Row(LogoCanvas.Names[i], (a + b) / 2f, a, b));
         }
         rows.Sort((x, y) => y.Avg.CompareTo(x.Avg));
-        _results.SetData(rows.ToArray());
+        _results.SetData(rows.GetRange(0, Mathf.Min(3, rows.Count)).ToArray());   // podium: top three
         _mode = Mode.Results;
         Refresh();
     }
