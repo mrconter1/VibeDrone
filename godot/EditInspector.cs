@@ -16,11 +16,15 @@ public partial class EditInspector : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
-        SetAnchorsPreset(LayoutPreset.TopRight);
+        SetAnchorsPreset(LayoutPreset.FullRect);   // fill the screen so the panel anchors to its corner
 
+        // pin the panel's top-right corner (20px in) and let it grow left + down to fit its content
         _panel = new PanelContainer { Theme = UiTheme.Get() };
         _panel.SetAnchorsPreset(LayoutPreset.TopRight);
-        _panel.OffsetLeft = -320; _panel.OffsetRight = -20; _panel.OffsetTop = 20;
+        _panel.GrowHorizontal = GrowDirection.Begin;
+        _panel.GrowVertical = GrowDirection.End;
+        _panel.OffsetLeft = -20; _panel.OffsetRight = -20;
+        _panel.OffsetTop = 20; _panel.OffsetBottom = 20;
         AddChild(_panel);
 
         var pad = new MarginContainer();
