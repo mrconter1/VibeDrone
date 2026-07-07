@@ -1,19 +1,23 @@
 using System.Collections.Generic;
 using Godot;
 
-// Logo browser + two-player vote. L on the main menu opens it; Left/Right browse the 10 minimal
-// VibeDrone variants. Two players rate each 1-5 (turn based, keys 1-5, auto-advancing); once both
-// have rated all, it shows a ranked results screen. Runs while paused (ProcessMode=Always).
+// Variant browser + two-player vote, shared by the wordmark logos (L on the main menu) and the square
+// app icons (I). Left/Right browse; two players rate each 1-5 (turn based, keys 1-5, auto-advancing);
+// once both have rated all, it shows a ranked results screen. Runs while paused (ProcessMode=Always).
 public partial class LogoMenu : CanvasLayer
 {
     private enum Mode { Vote, Results }
 
     private CenterContainer _logoBox = null!, _resBox = null!;
     private LogoCanvas _logo = null!;
+    private IconCanvas _icon = null!;
     private ResultsCanvas _results = null!;
     private Label _label = null!, _vote = null!, _hint = null!;
 
-    private readonly int[,] _votes = new int[2, LogoCanvas.Count];   // [player, logo] = 0 unvoted, 1-5
+    private int[,] _votes = new int[2, 1];   // [player, variant] = 0 unvoted, 1-5 (sized on open)
+    private string[] _names = System.Array.Empty<string>();
+    private int _count;
+    private bool _icons;                      // browsing the square app icons vs the wordmark logos
     private int _player, _index;
     private Mode _mode = Mode.Vote;
     private bool _open;
@@ -26,11 +30,21 @@ public partial class LogoMenu : CanvasLayer
         Visible = false;
     }
 
-    public void Toggle()
+    public void Toggle() => Open(icons: false);
+    public void ToggleIcons() => Open(icons: true);
+
+    // Open (or, if already open, close) onto the chosen variant set, starting a fresh vote.
+    private void Open(bool icons)
     {
         _open = !_open;
         Visible = _open;
-        if (_open) Refresh();
+        if (!_open) return;
+        _icons = icons;
+        _count = icons ? IconCanvas.Count : LogoCanvas.Count;
+        _names = icons ? IconCanvas.Names : LogoCanvas.Names;
+        _votes = new int[2, _count];
+        _player = 0; _index = 0; _mode = Mode.Vote;
+        Refresh();
     }
 
     public override void _Input(InputEvent ev)
@@ -53,8 +67,8 @@ public partial class LogoMenu : CanvasLayer
             if (n is >= 1 and <= 5) Vote(n);
             else switch (k.Keycode)
             {
-                case Key.Left: _index = (_index - 1 + LogoCanvas.Count) % LogoCanvas.Count; Refresh(); break;
-                case Key.Right: _index = (_index + 1) % LogoCanvas.Count; Refresh(); break;
+                case Key.Left: _index = (_index - 1 + _count) % _count; Refresh(); break;
+                case Key.Right: _index = (_index + 1) % _count; Refresh(); break;
                 case Key.Backspace: _votes[_player, _index] = 0; Refresh(); break;
                 case Key.Enter or Key.KpEnter when AllVoted(): EnterResults(); break;
                 case Key.L or Key.Escape: Toggle(); break;
@@ -73,12 +87,12 @@ public partial class LogoMenu : CanvasLayer
         Refresh();
     }
 
-    private bool PlayerDone(int p) { for (int i = 0; i < LogoCanvas.Count; i++) if (_votes[p, i] == 0) return false; return true; }
+    private bool PlayerDone(int p) { for (int i = 0; i < _count; i++) if (_votes[p, i] == 0) return false; return true; }
     private bool AllVoted() => PlayerDone(0) && PlayerDone(1);
-    private int FirstUnvoted(int p) { for (int i = 0; i < LogoCanvas.Count; i++) if (_votes[p, i] == 0) return i; return 0; }
+    private int FirstUnvoted(int p) { for (int i = 0; i < _count; i++) if (_votes[p, i] == 0) return i; return 0; }
     private int NextUnvoted(int p, int from)
     {
-        for (int k = 1; k <= LogoCanvas.Count; k++) { int i = (from + k) % LogoCanvas.Count; if (_votes[p, i] == 0) return i; }
+        for (int k = 1; k <= _count; k++) { int i = (from + k) % _count; if (_votes[p, i] == 0) return i; }
         return from;
     }
 
@@ -92,10 +106,10 @@ public partial class LogoMenu : CanvasLayer
     private void EnterResults()
     {
         var rows = new List<ResultsCanvas.Row>();
-        for (int i = 0; i < LogoCanvas.Count; i++)
+        for (int i = 0; i < _count; i++)
         {
             int a = _votes[0, i], b = _votes[1, i];
-            rows.Add(new ResultsCanvas.Row(LogoCanvas.Names[i], (a + b) / 2f, a, b));
+            rows.Add(new ResultsCanvas.Row(_names[i], (a + b) / 2f, a, b));
         }
         rows.Sort((x, y) => y.Avg.CompareTo(x.Avg));
         _results.SetData(rows.GetRange(0, Mathf.Min(3, rows.Count)).ToArray());   // podium: top three
@@ -111,11 +125,15 @@ public partial class LogoMenu : CanvasLayer
         _label.Visible = vote;
         _vote.Visible = vote;
 
+        _logo.Visible = vote && !_icons;
+        _icon.Visible = vote && _icons;
+
         if (vote)
         {
-            _logo.Style = _index;
-            _logo.QueueRedraw();
-            _label.Text = $"PLAYER {_player + 1}      ·      LOGO {_index + 1} / {LogoCanvas.Count}      ·      {LogoCanvas.Names[_index]}";
+            if (_icons) { _icon.Style = _index; _icon.QueueRedraw(); }
+            else { _logo.Style = _index; _logo.QueueRedraw(); }
+            string what = _icons ? "ICON" : "LOGO";
+            _label.Text = $"PLAYER {_player + 1}      ·      {what} {_index + 1} / {_count}      ·      {_names[_index]}";
             _vote.Text = $"{Mark(0)}Player 1   {Stars(_votes[0, _index])}          {Mark(1)}Player 2   {Stars(_votes[1, _index])}";
             _hint.Text = "1-5  rate      ← →  browse      Backspace  clear" + (AllVoted() ? "      Enter  results" : "") + "      L  close";
         }
@@ -150,6 +168,8 @@ public partial class LogoMenu : CanvasLayer
         root.AddChild(_logoBox);
         _logo = new LogoCanvas { CustomMinimumSize = new Vector2(860, 360) };
         _logoBox.AddChild(_logo);
+        _icon = new IconCanvas { CustomMinimumSize = new Vector2(420, 420), Visible = false };
+        _logoBox.AddChild(_icon);
 
         _resBox = new CenterContainer { Visible = false };
         _resBox.SetAnchorsPreset(Control.LayoutPreset.FullRect);

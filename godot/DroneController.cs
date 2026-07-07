@@ -370,7 +370,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // --- menu navigation: thin delegators to the ScreenCoordinator (called by the menu screens) ---
     public void StartGame() => _coord.StartGame();
     public void OpenMain() => _coord.OpenMain();
-    public void OpenLogos() => _logoMenu.Toggle();   // main-menu L
+    public void OpenLogos() => _logoMenu.Toggle();        // main-menu L (wordmark logos)
+    public void OpenIcons() => _logoMenu.ToggleIcons();   // main-menu I (square app icons)
     public void ResumeGame() => _coord.ResumeGame();
     public void OpenPause() => _coord.OpenPause();
     public void OpenHelp() => _coord.OpenHelp();
