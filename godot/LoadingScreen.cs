@@ -1,16 +1,16 @@
 using Godot;
 
-// Startup screen: the VibeDrone logo over a dark backdrop with a progress bar that fills, then the
-// whole thing fades out to reveal the main menu underneath. Sits above everything (Layer 20) and
-// runs while paused. Begin() plays it once.
+// Startup screen: the VibeDrone logo over a dark backdrop, held briefly then faded out to reveal the
+// main menu underneath. Continues the engine boot splash (same logo) so boot -> menu reads as one
+// smooth thing rather than a loading step - there's no real loading to wait on. Sits above everything
+// (Layer 20) and runs while paused. Begin() plays it once.
 public partial class LoadingScreen : CanvasLayer
 {
-    [Export] public float LoadTime = 1.3f;   // seconds the bar takes to fill
+    [Export] public float HoldTime = 0.4f;   // seconds to hold the logo before fading
     [Export] public float FadeTime = 0.5f;   // seconds to fade out afterwards
 
     private Control _root = null!;
-    private LoadingBar _bar = null!;
-    private float _progress, _fade = 1f;
+    private float _hold, _fade = 1f;
     private bool _active, _fading;
 
     public override void _Ready()
@@ -23,8 +23,7 @@ public partial class LoadingScreen : CanvasLayer
 
     public void Begin()
     {
-        _progress = 0f; _fade = 1f; _fading = false; _active = true;
-        _bar.Progress = 0f; _bar.QueueRedraw();
+        _hold = 0f; _fade = 1f; _fading = false; _active = true;
         _root.Modulate = Colors.White;
         Visible = true;
     }
@@ -36,10 +35,8 @@ public partial class LoadingScreen : CanvasLayer
 
         if (!_fading)
         {
-            _progress = Mathf.Min(1f, _progress + d / LoadTime);
-            _bar.Progress = _progress;
-            _bar.QueueRedraw();
-            if (_progress >= 1f) _fading = true;
+            _hold += d;
+            if (_hold >= HoldTime) _fading = true;
         }
         else
         {
@@ -68,9 +65,7 @@ public partial class LoadingScreen : CanvasLayer
         center.AddChild(v);
 
         v.AddChild(new LogoCanvas { Style = 0, CustomMinimumSize = new Vector2(620, 130) });
-        _bar = new LoadingBar { CustomMinimumSize = new Vector2(360, 6) };
-        v.AddChild(_bar);
-        var lbl = UiTheme.Body("L O A D I N G", UiTheme.TextDim, 14);
+        var lbl = UiTheme.Body("FPV TIME TRIAL", UiTheme.TextDim, 15);
         lbl.HorizontalAlignment = HorizontalAlignment.Center;
         v.AddChild(lbl);
     }
