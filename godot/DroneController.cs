@@ -10,7 +10,7 @@ using NQuat = System.Numerics.Quaternion;
 // (ToGodot), so if the replay looks correct the live model is guaranteed consistent.
 // The model integrates orientation as a proper quaternion (in the reference sim's frame); we
 // convert via a forward/up basis - no fragile per-axis sequential rotation.
-public partial class DroneController : Node3D
+public partial class DroneController : Node3D, ScreenCoordinator.IGame
 {
     [Export] public int JoyDevice = 0;
     [Export] public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
@@ -57,9 +57,7 @@ public partial class DroneController : Node3D
     private PlaybackController _playback = null!;
 
     // --- menu system ---
-    private enum Screen { None, Main, Levels, Settings, Pause, Help }
-    private Screen _screen = Screen.Main;
-    private Screen _return = Screen.Main;    // where Levels/Settings/Help back out to
+    private ScreenCoordinator _coord = null!;
     private MenuCamera _menuCam = null!;
     private MenuBackdrop _backdrop = null!;
     private MainMenu _mainMenu = null!;
@@ -76,7 +74,6 @@ public partial class DroneController : Node3D
         Config.Load();                                       // UI scale + blur + AA preferences
         LegacyMigration.Run();                               // old index-keyed records -> stable-id files
         GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
-        ApplyAA();                                            // MSAA + FXAA (fixes edge/checker shimmer)
 
         _sessionLog = new SessionLog();
         AddChild(_sessionLog);
@@ -133,12 +130,16 @@ public partial class DroneController : Node3D
         _pause.Setup(this);
         AddChild(_pause);
 
+        _coord = new ScreenCoordinator(this, GetTree(), GetViewport(), _cam,
+            _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam);
+        _coord.ApplyAA();   // MSAA + FXAA (fixes edge/checker shimmer)
+
         var edit = new EditController();
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
-        SetLevelIndex(0);            // load the first level (gates + props), pre-build a race behind the menu
-        SetScreen(Screen.Main); // ...but open on the title screen
+        SetLevelIndex(0);       // load the first level (gates + props), pre-build a race behind the menu
+        _coord.OpenMain();      // ...but open on the title screen
     }
 
     public override void _Input(InputEvent ev)
@@ -348,53 +349,26 @@ public partial class DroneController : Node3D
     public float BestLapAt(int i) => LapRecorder.BestLapFor(LevelStore.IdAt(i));
     public float[] TopLapsAt(int i) => LapRecorder.TopLapsFor(LevelStore.IdAt(i));
 
-    // --- screen coordinator: one screen visible at a time, driving pause, camera and cursor ---
-    private void SetScreen(Screen s)
-    {
-        _screen = s;
-        _mainMenu.Show(s == Screen.Main);
-        _levelSelect.Show(s == Screen.Levels);
-        _settings.Show(s == Screen.Settings);
-        _pause.Show(s == Screen.Pause);
-        _help.Show(s == Screen.Help);
+    // --- menu navigation: thin delegators to the ScreenCoordinator (called by the menu screens) ---
+    public void StartGame() => _coord.StartGame();
+    public void OpenMain() => _coord.OpenMain();
+    public void ResumeGame() => _coord.ResumeGame();
+    public void OpenPause() => _coord.OpenPause();
+    public void OpenHelp() => _coord.OpenHelp();
+    public void CloseHelp() => _coord.CloseHelp();
+    public void OpenLevels(bool fromPause) => _coord.OpenLevels(fromPause);
+    public void OpenSettings(bool fromPause) => _coord.OpenSettings(fromPause);
+    public void MenuBack() => _coord.MenuBack();
+    public void RestartRace() => _coord.RestartRace();
+    public void PlayLevel(int index) => _coord.PlayLevel(index);
+    public void WatchBest(int index) => _coord.WatchBest(index);
+    public void ApplyAA() => _coord.ApplyAA();
+    public void RefreshSsaa() => _coord.RefreshSsaa();
 
-        bool fullScreenMenu = s is Screen.Main or Screen.Levels or Screen.Settings;
-        _backdrop.SetActive(fullScreenMenu);
-        _menuCam.Active = fullScreenMenu;
-        ApplyMenuSsaa(fullScreenMenu);   // supersample the 3D behind the menus to kill orbit shimmer
-        if (fullScreenMenu) _menuCam.MakeCurrent();
-        else if (s == Screen.None) _cam.MakeCurrent();   // Pause/Help keep the (frozen) drone view
-
-        GetTree().Paused = s != Screen.None;
-        Input.MouseMode = s == Screen.None ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
-    }
-
-    // navigation entry points used by the menus
-    public void StartGame() => PlayLevel(0);                 // main-menu Start -> first track
-    public void OpenMain() => SetScreen(Screen.Main);
-    public void ResumeGame() => SetScreen(Screen.None);
-    public void OpenPause() => SetScreen(Screen.Pause);
-    public void OpenHelp() { _return = _screen; SetScreen(Screen.Help); }
-    public void CloseHelp() => SetScreen(_return == Screen.Help ? Screen.Pause : _return);
-    public void OpenLevels(bool fromPause) { _return = fromPause ? Screen.Pause : Screen.Main; SetScreen(Screen.Levels); }
-    public void OpenSettings(bool fromPause) { _return = fromPause ? Screen.Pause : Screen.Main; SetScreen(Screen.Settings); }
-    public void MenuBack() => SetScreen(_return);
-    public void RestartRace() { StartRace(); SetScreen(Screen.None); }
-
-    // Load a track and drop into flying it.
-    public void PlayLevel(int index)
-    {
-        SetLevelIndex(index);
-        SetScreen(Screen.None);
-    }
-
-    // Load a track and watch its best-lap replay (chase cam). Playback manages its own cam + pause.
-    public void WatchBest(int index)
-    {
-        SetLevelIndex(index);
-        SetScreen(Screen.None);
-        _playback.Start();
-    }
+    // ScreenCoordinator.IGame: the level/replay/race verbs the coordinator hands back to the game.
+    void ScreenCoordinator.IGame.LoadLevel(int index) => SetLevelIndex(index);
+    void ScreenCoordinator.IGame.StartPlayback() => _playback.Start();
+    void ScreenCoordinator.IGame.StartRace() => StartRace();
 
     // Load a level (by catalogue index), re-wire its gates, load that level's records, restart.
     private void SetLevelIndex(int index)
@@ -464,32 +438,6 @@ public partial class DroneController : Node3D
 
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
-
-    private bool MenuActive => _screen is Screen.Main or Screen.Levels or Screen.Settings;
-    public void RefreshSsaa() => ApplyMenuSsaa(MenuActive);
-
-    // Render the 3D above native resolution and downscale (SSAA) while a menu is open. Downsampling
-    // the extra detail removes the checker/thin-edge shimmer the slow orbit reveals - and unlike TAA
-    // it has no temporal artefacts and works on the D3D12 backend. Native res (1.0) during gameplay.
-    private void ApplyMenuSsaa(bool menu)
-    {
-        var vp = GetViewport();
-        vp.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
-        vp.Scaling3DScale = menu && Config.MenuSsaa ? 1.5f : 1.0f;
-    }
-
-    public void ApplyAA()
-    {
-        var vp = GetViewport();
-        vp.Msaa3D = Config.Msaa switch
-        {
-            2 => Viewport.Msaa.Msaa2X,
-            4 => Viewport.Msaa.Msaa4X,
-            8 => Viewport.Msaa.Msaa8X,
-            _ => Viewport.Msaa.Disabled,
-        };
-        vp.ScreenSpaceAA = Config.Fxaa ? Viewport.ScreenSpaceAAEnum.Fxaa : Viewport.ScreenSpaceAAEnum.Disabled;
-    }
 
     public float UiScale => Config.UiScale;
     public void ApplyUiScale(float scale)
