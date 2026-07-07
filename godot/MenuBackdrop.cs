@@ -38,7 +38,10 @@ public partial class MenuBackdrop : CanvasLayer
         {
             int iteration = i / 2;                       // two rects (H,V) per iteration
             _blurRects[i].Visible = iteration < Config.BlurIterations;
-            _blurMats[i].SetShaderParameter("radius", Config.BlurRadius);
+            // Kawase (type 1): grow the radius each iteration for a wider, dual-Kawase-like spread.
+            float r = Config.BlurRadius * (Config.BlurType == 1 ? iteration + 1 : 1);
+            _blurMats[i].SetShaderParameter("radius", r);
+            _blurMats[i].SetShaderParameter("kind", Config.BlurType == 2 ? 1 : 0);   // 1 = box weights
         }
         _finalMat.SetShaderParameter("tint_amt", Config.BlurTint);
         _finalMat.SetShaderParameter("vignette", Config.BlurVignette);
@@ -70,12 +73,13 @@ public partial class MenuBackdrop : CanvasLayer
 shader_type canvas_item;
 uniform sampler2D screen : hint_screen_texture, filter_linear;
 uniform float radius = 4.5;
+uniform int kind = 0;   // 0 = Gaussian weights, 1 = box (equal) weights
 void fragment() {{
     vec2 stride = SCREEN_PIXEL_SIZE * (radius / 3.0) * {dir};
     vec3 c = vec3(0.0);
     float s = 0.0;
     for (int i = -6; i <= 6; i++) {{
-        float w = exp(-float(i * i) / 18.0);   // Gaussian, sigma = 3 taps
+        float w = (kind == 1) ? 1.0 : exp(-float(i * i) / 18.0);   // box or Gaussian (sigma 3 taps)
         c += texture(screen, SCREEN_UV + stride * float(i)).rgb * w;
         s += w;
     }}

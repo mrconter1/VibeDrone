@@ -363,6 +363,7 @@ public partial class DroneController : Node3D
         bool fullScreenMenu = s is Screen.Main or Screen.Levels or Screen.Settings;
         _backdrop.SetActive(fullScreenMenu);
         _menuCam.Active = fullScreenMenu;
+        ApplyMenuSsaa(fullScreenMenu);   // supersample the 3D behind the menus to kill orbit shimmer
         if (fullScreenMenu) _menuCam.MakeCurrent();
         else if (s == Screen.None) _cam.MakeCurrent();   // Pause/Help keep the (frozen) drone view
 
@@ -468,6 +469,17 @@ public partial class DroneController : Node3D
     public bool MenuActive => _screen is Screen.Main or Screen.Levels or Screen.Settings;
     public void ToggleBlurMenu() { if (MenuActive) _blurMenu.Toggle(); }
     public void RefreshBackdrop() => _backdrop.Refresh();
+    public void RefreshSsaa() => ApplyMenuSsaa(MenuActive);
+
+    // Render the 3D above native resolution and downscale (SSAA) while a menu is open. Downsampling
+    // the extra detail removes the checker/thin-edge shimmer the slow orbit reveals - and unlike TAA
+    // it has no temporal artefacts and works on the D3D12 backend. Native res (1.0) during gameplay.
+    private void ApplyMenuSsaa(bool menu)
+    {
+        var vp = GetViewport();
+        vp.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
+        vp.Scaling3DScale = menu && Config.MenuSsaa ? 1.5f : 1.0f;
+    }
 
     public void ApplyAA()
     {
