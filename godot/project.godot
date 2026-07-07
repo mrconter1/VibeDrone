@@ -7,6 +7,8 @@ config_version=5
 config/name="OpenDrone"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.3", "C#", "Forward Plus")
+config/icon="res://icon.png"
+config/windows_native_icon="res://icon.ico"
 
 ; Replace the Godot boot splash with our own VibeDrone logo (boot.png), painted on a
 ; dark background the instant the engine window opens - before .NET/the scene load - so
