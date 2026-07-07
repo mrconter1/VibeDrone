@@ -26,10 +26,10 @@ public partial class LogoCanvas : Control
     {
         switch (Style)
         {
-            case 0: Divider(thick: 5f, overhang: 14f); break;
-            case 1: Divider(thick: 8f, overhang: 14f); break;    // thicker
-            case 2: Divider(thick: 5f, overhang: 26f); break;    // longer
-            default: Divider(thick: 5f, overhang: 7f); break;    // shorter
+            case 0: Divider(thick: 4.5f, overhang: 14f); break;   // the chosen one (slightly thinner)
+            case 1: Divider(thick: 7f, overhang: 14f); break;     // thicker
+            case 2: Divider(thick: 4.5f, overhang: 26f); break;   // longer
+            default: Divider(thick: 4.5f, overhang: 7f); break;   // shorter
         }
     }
 

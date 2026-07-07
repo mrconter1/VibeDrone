@@ -23,9 +23,9 @@ public partial class MainMenu : MenuScreen
     {
         VBoxContainer v = CenteredBox(out Control root);
 
-        v.AddChild(UiTheme.Title("OPENDRONE", 76));
+        v.AddChild(new LogoCanvas { Style = 0, CustomMinimumSize = new Vector2(620, 130) });   // VibeDrone divider logo
         v.AddChild(UiTheme.Body("FPV TIME TRIAL", UiTheme.TextDim, 18));
-        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 34) });   // spacer
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 24) });   // spacer
 
         _first = UiTheme.MenuItem("Start", () => Ctrl.StartGame());
         v.AddChild(_first);
