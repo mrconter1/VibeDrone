@@ -145,22 +145,22 @@ public partial class LapRecorder : Node3D
             Ranks += $"{i + 1}.  {_bestLaps[i]:00.00}\n";
     }
 
-    // --- persistence (per track, keyed by index, so records never mix between tracks) ---
-    private int _track;
-    private string GhostPath => $"user://ghost_{_track}.json";
-    private string LapsPath => $"user://laptimes_{_track}.json";
+    // --- persistence (per level, keyed by stable id, so records never mix between levels) ---
+    private string _levelId = "";
+    private string GhostPath => $"user://ghost_{_levelId}.json";
+    private string LapsPath => $"user://laptimes_{_levelId}.json";
 
-    // Best saved lap for any track (0 if none yet), without switching to it - for the track menu.
-    public static float BestLapFor(int track)
+    // Best saved lap for any level (0 if none yet), without switching to it - for the level menu.
+    public static float BestLapFor(string id)
     {
-        float[] laps = TopLapsFor(track);
+        float[] laps = TopLapsFor(id);
         return laps.Length > 0 ? laps[0] : 0f;
     }
 
-    // Sorted saved lap times for any track (fastest first), without switching to it.
-    public static float[] TopLapsFor(int track)
+    // Sorted saved lap times for any level (fastest first), without switching to it.
+    public static float[] TopLapsFor(string id)
     {
-        if (!Persistence.TryLoad($"user://laptimes_{track}.json", out Variant parsed)
+        if (!Persistence.TryLoad($"user://laptimes_{id}.json", out Variant parsed)
             || parsed.VariantType != Variant.Type.Array) return System.Array.Empty<float>();
         var arr = parsed.AsGodotArray();
         var laps = new float[arr.Count];
@@ -169,17 +169,17 @@ public partial class LapRecorder : Node3D
         return laps;
     }
 
-    // Wipe a track's saved records (empty lap list + empty ghost), without switching to it.
-    public static void ClearTrack(int track)
+    // Wipe a level's saved records (empty lap list + empty ghost), without switching to it.
+    public static void ClearRecords(string id)
     {
-        Persistence.Save($"user://laptimes_{track}.json", new Godot.Collections.Array());
-        Persistence.Save($"user://ghost_{track}.json", new Godot.Collections.Array());
+        Persistence.Save($"user://laptimes_{id}.json", new Godot.Collections.Array());
+        Persistence.Save($"user://ghost_{id}.json", new Godot.Collections.Array());
     }
 
-    // Switch to another track's records: drop the in-memory ghost/laps and reload that track's.
-    public void SetTrack(int index)
+    // Switch to another level's records: drop the in-memory ghost/laps and reload that level's.
+    public void SetLevel(string id)
     {
-        _track = index;
+        _levelId = id;
         _bestLaps.Clear();
         _bestGhost = new List<Sample>();
         Ranks = "";

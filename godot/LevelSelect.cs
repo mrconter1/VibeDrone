@@ -128,7 +128,7 @@ public partial class LevelSelect : CanvasLayer
         float best = _ctrl.BestLapAt(i);
         _detBest.Text = best > 0f ? $"BEST  {FmtTime(best)}" : "no times yet";
 
-        float[] laps = LapRecorder.TopLapsFor(i);
+        float[] laps = _ctrl.TopLapsAt(i);
         if (laps.Length == 0) { _detList.Text = "-"; _watch.Disabled = true; return; }
         _watch.Disabled = false;
         string s = "";

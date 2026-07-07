@@ -1,41 +1,78 @@
 using System.Collections.Generic;
 using Godot;
 
-// The flying environment: sun, procedural sky, grid ground, and the circuit of gates.
-// Self-contained - add it to the scene and it builds itself. Kept separate from
-// DroneController so the controller is only about flying the drone. Gate positions
-// persist to user://gates.json (saved on edit, loaded on launch).
+// The flying environment: sun, procedural sky, grid ground, plus the level's gates and props.
+// Self-contained - add it to the scene and it builds the world. A Level (data) is then loaded to
+// populate gates + props + ground colour; edits are captured back into the Level and saved.
 public partial class Arena : Node3D
 {
     private readonly List<Node3D> _gates = new();
     private readonly List<Area3D> _triggers = new();
-    private Transform3D[] _poses = System.Array.Empty<Transform3D>();   // current track's gate poses
+    private readonly List<PropNode> _props = new();
+    private Level _level = null!;
+    private ShaderMaterial _groundMat = null!;
 
-    public int TrackIndex { get; private set; }
-    public string TrackName => TrackLibrary.Name(TrackIndex);
+    public Level CurrentLevel => _level;
+    public string TrackName => _level?.Name ?? "";
     public IReadOnlyList<Node3D> Gates => _gates;
     public IReadOnlyList<Area3D> GateTriggers => _triggers;
+    public IReadOnlyList<PropNode> Props => _props;
     public Transform3D StartTransform => _gates[0].GlobalTransform;   // gate 0 = start/finish
-
-    private string SavePath => $"user://gates_{TrackIndex}.json";
 
     public override void _Ready()
     {
-        BuildWorld();
-        LoadTrack(0);
+        BuildWorld();   // world only; a Level is loaded next by the controller
     }
 
-    // Tear down the current gates and build the given track (wrapping the index), applying any
-    // saved layout for it. The world (sky/ground/light) is built once and kept.
-    public void LoadTrack(int index)
+    // Tear down the current gates/props and build the given level (gates + props + ground colour).
+    public void LoadLevel(Level lvl)
     {
-        TrackIndex = TrackLibrary.Wrap(index);
-        _poses = TrackLibrary.BuildGates(TrackIndex);
+        _level = lvl;
         foreach (Node3D g in _gates) g.QueueFree();
+        foreach (PropNode p in _props) p.QueueFree();
         _gates.Clear();
         _triggers.Clear();
-        BuildGates();
-        LoadLayout();
+        _props.Clear();
+
+        BuildGates(lvl.Gates);
+        foreach (Prop prop in lvl.Props)
+        {
+            PropNode node = PropTypes.Build(prop);
+            AddChild(node);
+            _props.Add(node);
+        }
+        _groundMat.SetShaderParameter("base_color", lvl.Ground.Color);
+    }
+
+    // Capture the current gate + prop transforms back into the Level and persist it (from edit mode).
+    public void SaveEdits()
+    {
+        if (_level == null) return;
+        _level.Gates.Clear();
+        foreach (Node3D g in _gates)
+        {
+            Transform3D t = g.GlobalTransform;
+            _level.Gates.Add(new Pose { Pos = t.Origin, Rot = t.Basis.GetRotationQuaternion() });
+        }
+        _level.Props.Clear();
+        foreach (PropNode p in _props) { p.CaptureTransform(); _level.Props.Add(p.Data); }
+        LevelStore.Save(_level);
+    }
+
+    // Spawn a new prop at a position (edit mode); returns the node so the caller can select it.
+    public PropNode AddProp(Vector3 pos)
+    {
+        var data = new Prop { Type = "rock", Pos = pos, Scale = new Vector3(3f, 2.5f, 3f) };
+        PropNode node = PropTypes.Build(data);
+        AddChild(node);
+        _props.Add(node);
+        return node;
+    }
+
+    public void RemoveProp(PropNode node)
+    {
+        _props.Remove(node);
+        node.QueueFree();
     }
 
     private void BuildWorld()
@@ -80,17 +117,18 @@ public partial class Arena : Node3D
 
         // crisp anti-aliased grid ground via shader (great motion/altitude reference)
         var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(1000, 1000) } };
-        ground.MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = GridShaderCode } };
+        _groundMat = new ShaderMaterial { Shader = new Shader { Code = GridShaderCode } };
+        ground.MaterialOverride = _groundMat;
         AddChild(ground);
     }
 
-    private void BuildGates()
+    private void BuildGates(List<Pose> poses)
     {
         var green = GateMaterial(new Color(0.10f, 1.0f, 0.30f));
         var red = GateMaterial(new Color(1.0f, 0.15f, 0.20f));
-        for (int i = 0; i < _poses.Length; i++)
+        for (int i = 0; i < poses.Count; i++)
         {
-            var gate = new Node3D { Transform = _poses[i] };   // pose carries position + orientation
+            var gate = new Node3D { Transform = new Transform3D(new Basis(poses[i].Rot), poses[i].Pos) };
             gate.AddChild(SquareFrame(green, -0.18f));     // fly THROUGH the green side
             gate.AddChild(SquareFrame(red, 0.18f));        // red = wrong side
 
@@ -131,32 +169,6 @@ public partial class Arena : Node3D
             Position = new Vector3(1.6f, 6.4f, 0f),
             MaterialOverride = new ShaderMaterial { Shader = new Shader { Code = CheckerShaderCode } },
         });
-    }
-
-    private static Transform3D DictXform(Godot.Collections.Dictionary d) =>
-        new(new Basis(Persistence.ReadRot(d)), Persistence.ReadPos(d));
-
-    // Persist every gate's position/rotation (gate 0 = start/finish). Called after an edit move.
-    public void SaveLayout()
-    {
-        var gates = new Godot.Collections.Array();
-        foreach (Node3D g in _gates)
-        {
-            Transform3D t = g.GlobalTransform;
-            gates.Add(Persistence.PoseDict(t.Origin, t.Basis.GetRotationQuaternion()));
-        }
-        Persistence.Save(SavePath, new Godot.Collections.Dictionary { { "gates", gates } });
-    }
-
-    // Apply a saved layout, if any, over the default positions.
-    private void LoadLayout()
-    {
-        if (!Persistence.TryLoad(SavePath, out Variant parsed) || parsed.VariantType != Variant.Type.Dictionary) return;
-        var root = parsed.AsGodotDictionary();
-        if (!root.ContainsKey("gates")) return;
-        var gates = root["gates"].AsGodotArray();
-        for (int i = 0; i < gates.Count && i < _gates.Count; i++)
-            _gates[i].GlobalTransform = DictXform(gates[i].AsGodotDictionary());
     }
 
     private const string CheckerShaderCode = @"

@@ -74,6 +74,7 @@ public partial class DroneController : Node3D
         GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
 
         Config.Load();                                       // UI scale + blur + AA preferences
+        LegacyMigration.Run();                               // old index-keyed records -> stable-id files
         GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
         ApplyAA();                                            // MSAA + FXAA (fixes edge/checker shimmer)
 
@@ -136,8 +137,7 @@ public partial class DroneController : Node3D
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
-        WireGates();
-        StartRace();            // pre-build a race behind the menu (armed at the start line)
+        SetTrack(0);            // load the first level (gates + props), pre-build a race behind the menu
         SetScreen(Screen.Main); // ...but open on the title screen
     }
 
@@ -340,11 +340,13 @@ public partial class DroneController : Node3D
         }
     }
 
+    private int _levelIndex;
     public string TrackName => _arena.TrackName;
-    public int TrackIndex => _arena.TrackIndex;
-    public int TrackCount => TrackLibrary.Count;
-    public string TrackNameAt(int i) => TrackLibrary.Name(i);
-    public float BestLapAt(int i) => LapRecorder.BestLapFor(i);
+    public int TrackIndex => _levelIndex;
+    public int TrackCount => LevelStore.Count;
+    public string TrackNameAt(int i) => LevelStore.NameAt(i);
+    public float BestLapAt(int i) => LapRecorder.BestLapFor(LevelStore.IdAt(i));
+    public float[] TopLapsAt(int i) => LapRecorder.TopLapsFor(LevelStore.IdAt(i));
 
     // --- screen coordinator: one screen visible at a time, driving pause, camera and cursor ---
     private void SetScreen(Screen s)
@@ -394,12 +396,14 @@ public partial class DroneController : Node3D
         _playback.Start();
     }
 
-    // Rebuild the arena for another track, re-wire its gates, load that track's records, restart.
+    // Load a level (by catalogue index), re-wire its gates, load that level's records, restart.
     private void SetTrack(int index)
     {
-        _arena.LoadTrack(index);
+        _levelIndex = LevelStore.Wrap(index);
+        string id = LevelStore.IdAt(_levelIndex);
+        _arena.LoadLevel(LevelStore.Load(id));
         WireGates();
-        _recorder.SetTrack(_arena.TrackIndex);
+        _recorder.SetLevel(id);
         StartRace();
     }
 
@@ -498,8 +502,9 @@ public partial class DroneController : Node3D
     // Wipe one track's saved records (from the Levels screen); reload if it's the active track.
     public void ClearRecords(int index)
     {
-        LapRecorder.ClearTrack(index);
-        if (index == _arena.TrackIndex) _recorder.SetTrack(index);
+        string id = LevelStore.IdAt(index);
+        LapRecorder.ClearRecords(id);
+        if (index == _levelIndex) _recorder.SetLevel(id);
     }
 
 

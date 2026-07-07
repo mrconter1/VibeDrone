@@ -128,7 +128,7 @@ public partial class EditController : Node3D
         }
         else
         {
-            if (_grabbed != null) { _grabbed = null; _arena.SaveLayout(); }   // drop + persist
+            if (_grabbed != null) { _grabbed = null; _arena.SaveEdits(); }   // drop + persist
             _hovered = null;
             _highlight.Visible = false;
             _droneCam.MakeCurrent();         // switch view back to the drone
@@ -138,7 +138,7 @@ public partial class EditController : Node3D
     // C: pick up the highlighted object (carry it), or drop the carried one in place.
     private void GrabOrDrop()
     {
-        if (_grabbed != null) { _grabbed = null; _arena.SaveLayout(); return; }   // drop / lock in place + persist
+        if (_grabbed != null) { _grabbed = null; _arena.SaveEdits(); return; }   // drop / lock in place + persist
         if (_hovered != null)
         {
             _grabbed = _hovered;
