@@ -43,7 +43,7 @@ public partial class MainMenu : MenuScreen
         VBoxContainer v = CenteredBox(out _);
 
         v.AddChild(new LogoCanvas { Style = 0, CustomMinimumSize = new Vector2(620, 130) });   // VibeDrone divider logo
-        var sub = UiTheme.Body("F P V   T I M E   T R I A L", UiTheme.TextDim, 22);
+        var sub = UiTheme.Body("R E A L I S T I C   F P V   S I M", UiTheme.TextDim, 22);
         sub.HorizontalAlignment = HorizontalAlignment.Center;
         v.AddChild(sub);
         v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 34) });   // spacer
