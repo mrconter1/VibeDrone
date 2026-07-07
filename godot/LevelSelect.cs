@@ -8,7 +8,7 @@ public partial class LevelSelect : MenuScreen
     private VBoxContainer _rows = null!;
     private Label _detName = null!, _detBest = null!, _detList = null!;
     private Button _watch = null!, _delete = null!, _firstRow = null!;
-    private MapPreview _preview = null!;
+    private MapPreview3D _preview = null!;
     private int _focused;
 
     protected override void OnShow() { Rebuild(); _firstRow?.CallDeferred(Control.MethodName.GrabFocus); }
@@ -36,7 +36,7 @@ public partial class LevelSelect : MenuScreen
         _detBest = UiTheme.Body("", UiTheme.Good, 20);
         det.AddChild(_detBest);
         det.AddChild(UiTheme.Body("MAP", UiTheme.TextDim, 14));
-        _preview = new MapPreview { CustomMinimumSize = new Vector2(360, 230) };
+        _preview = new MapPreview3D { CustomMinimumSize = new Vector2(360, 230) };
         det.AddChild(_preview);
         det.AddChild(new HSeparator());
         det.AddChild(UiTheme.Body("TOP LAPS", UiTheme.TextDim, 14));
