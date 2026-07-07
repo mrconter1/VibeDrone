@@ -86,6 +86,7 @@ public sealed class Prop
     public Quaternion Rot = Quaternion.Identity;
     public Vector3 Scale = Vector3.One;
     public Color Color = new(0.42f, 0.42f, 0.44f);
+    public bool Solid = true;   // collidable obstacle (hitting it resets the lap); false = decorative
 
     public Godot.Collections.Dictionary ToDict() => new()
     {
@@ -94,6 +95,7 @@ public sealed class Prop
         { "rot", new Godot.Collections.Array { Rot.X, Rot.Y, Rot.Z, Rot.W } },
         { "scale", new Godot.Collections.Array { Scale.X, Scale.Y, Scale.Z } },
         { "color", GroundDef.ColorArr(Color) },
+        { "solid", Solid },
     };
 
     public static Prop FromDict(Godot.Collections.Dictionary d)
@@ -103,8 +105,9 @@ public sealed class Prop
         if (d.ContainsKey("rot")) { var a = d["rot"].AsGodotArray(); p.Rot = new Quaternion(a[0].AsSingle(), a[1].AsSingle(), a[2].AsSingle(), a[3].AsSingle()); }
         if (d.ContainsKey("scale")) { var a = d["scale"].AsGodotArray(); p.Scale = new Vector3(a[0].AsSingle(), a[1].AsSingle(), a[2].AsSingle()); }
         if (d.ContainsKey("color")) p.Color = GroundDef.ArrColor(d["color"].AsGodotArray());
+        if (d.ContainsKey("solid")) p.Solid = d["solid"].AsBool();
         return p;
     }
 
-    public Prop Clone() => new() { Type = Type, Pos = Pos, Rot = Rot, Scale = Scale, Color = Color };
+    public Prop Clone() => new() { Type = Type, Pos = Pos, Rot = Rot, Scale = Scale, Color = Color, Solid = Solid };
 }
