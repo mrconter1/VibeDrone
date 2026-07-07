@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\godot\Bounce.cs" />
     <Compile Include="..\godot\FlightModel.cs" />
     <Compile Include="..\godot\RaceLogic.cs" />
     <Compile Include="..\godot\RaceState.cs" />

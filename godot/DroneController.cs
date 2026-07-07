@@ -308,18 +308,11 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _gateHit = col != null;                             // touched a gate bar
         if (col != null)
         {
-            Vector3 n = col.GetNormal();
+            // reflect the model velocity about the bar normal in Godot space (Z-flipped from the
+            // model frame), then flip back. Bounce.Respond no-ops on a departing contact.
             var vG = new Vector3(_fm.Vel.X, _fm.Vel.Y, -_fm.Vel.Z);
-            float into = vG.Dot(n);
-            if (into < 0f)                                  // only respond if moving into the surface
-            {
-                // real-drone hit: only a small normal rebound, and the tangential slide is
-                // heavily scrubbed (energy lost) so it thuds/deflects instead of bouncing.
-                Vector3 vN = into * n;                      // component into the surface
-                Vector3 vT = vG - vN;                       // tangential (along the bar)
-                vG = vT * (1f - HitFriction) - Restitution * vN;
-                _fm.Vel = new NVec(vG.X, vG.Y, -vG.Z);
-            }
+            vG = Bounce.Respond(vG, col.GetNormal(), Restitution, HitFriction);
+            _fm.Vel = new NVec(vG.X, vG.Y, -vG.Z);
         }
         Vector3 gp = _drone.GlobalPosition;                 // keep the model in sync with the real position
         _fm.Pos = new NVec(gp.X, gp.Y, -gp.Z);
