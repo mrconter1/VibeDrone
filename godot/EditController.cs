@@ -37,7 +37,9 @@ public partial class EditController : Node3D
 
     private Node3D? _hovered;
     private Node3D? _grabbed;
-    private float _carryDist = 15f;   // held this far in front of the camera
+    private float _carryDist = 15f;      // held this far in front of the camera
+    private Basis _grabCamBasis = Basis.Identity;   // camera + object orientation captured at grab, so the
+    private Basis _grabObjBasis = Basis.Identity;   // object turns by how much the VIEW turns since (relative)
     private int _colorIdx;
     private int _field;            // active inspector field
     private bool _dirtyEdit;       // an arrow nudge is in progress (record history on release)
@@ -287,6 +289,8 @@ public partial class EditController : Node3D
         _grabbed = node;
         _hovered = null;
         _carryDist = Mathf.Clamp(_cam.GlobalPosition.DistanceTo(node.GlobalPosition), 3f, 60f);
+        _grabCamBasis = SnapBasis(_cam.GlobalBasis);      // reference view
+        _grabObjBasis = SnapBasis(node.GlobalBasis);      // keep the object's own angle (snapped to 45°)
     }
 
     private void SpawnRock()
@@ -432,9 +436,11 @@ public partial class EditController : Node3D
 
         if (_grabbed != null)
         {
-            // held in front at the grab distance, snapped to the 0.5 m grid; orientation follows the view
+            // held in front at the grab distance, snapped to the 0.5 m grid; the object turns by however
+            // much the view has turned since grab (so picking it up doesn't change its orientation)
             Vector3 pos = SnapPos(_cam.GlobalPosition - _cam.GlobalBasis.Z * _carryDist);
-            Basis rot = SnapBasis(_cam.GlobalBasis);
+            Basis viewDelta = SnapBasis(_cam.GlobalBasis) * _grabCamBasis.Inverse();
+            Basis rot = SnapBasis(viewDelta * _grabObjBasis);
             if (_grabbed is PropNode pn) { pn.Data.Rot = rot.GetRotationQuaternion(); UpdatePropScale(pn, (float)delta); pn.SetPoseKeepPos(pos); }
             else _grabbed.GlobalTransform = new Transform3D(rot.Orthonormalized(), pos);
         }
