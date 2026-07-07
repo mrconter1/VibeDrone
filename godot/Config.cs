@@ -6,7 +6,7 @@ public static class Config
 {
     private const string Path = "user://config.json";
 
-    public static float UiScale = 1.0f;          // whole-UI scale factor
+    public static float UiScale = 1.10f;         // whole-UI scale factor
 
     // menu backdrop blur (tuned defaults; no longer user-editable in-game)
     public static int BlurType = 1;              // 0 Gaussian, 1 Kawase (expanding), 2 Box
@@ -16,9 +16,9 @@ public static class Config
     public static float BlurVignette = 0.60f;
 
     // anti-aliasing (whole game) - exposed in Settings
-    public static int Msaa = 8;                  // 0 / 2 / 4 / 8  (MSAA 3D samples)
-    public static bool Fxaa = true;              // post AA, smooths shader aliasing (checker flag)
-    public static bool MenuSsaa = true;          // supersample the 3D while a menu is open (kills orbit shimmer)
+    public static int Msaa = 4;                  // 0 / 2 / 4 / 8  (MSAA 3D samples)
+    public static bool Fxaa = false;             // post AA, smooths shader aliasing (checker flag)
+    public static bool MenuSsaa = false;         // supersample the 3D while a menu is open (kills orbit shimmer)
 
     public static void Load()
     {
