@@ -46,10 +46,14 @@ public static class LevelStore
     // The current state of a level: the saved edit if present, else a fresh build from code.
     public static Level Load(string id)
     {
-        if (Persistence.TryLoad(PathFor(id), out Variant v) && v.VariantType == Variant.Type.Dictionary)
+        if (Persistence.TryReadText(PathFor(id), out string json))
         {
-            Level saved = Level.FromDict(v.AsGodotDictionary());
-            if (saved.Gates.Count > 0) { saved.Id = id; return saved; }
+            try
+            {
+                Level saved = Level.FromJson(json);
+                if (saved.Gates.Count > 0) { saved.Id = id; return saved; }
+            }
+            catch { /* corrupt file -> fall back to the code build */ }
         }
         return BuildBase(id);
     }
@@ -59,7 +63,7 @@ public static class LevelStore
     public static void Save(Level lvl)
     {
         EnsureDir();
-        Persistence.Save(PathFor(lvl.Id), lvl.ToDict());
+        Persistence.WriteText(PathFor(lvl.Id), lvl.ToJson());
     }
 
     private static Level BuildBase(string id)

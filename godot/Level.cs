@@ -3,8 +3,8 @@ using Godot;
 
 // A level is data: metadata, ground, the ordered gates (gate 0 = start/finish) and a list of props
 // (decorative/obstacle objects). Built-ins are defined in code (LevelStore) and player edits are
-// saved as JSON in user://levels/<id>.json. Kept engine-agnostic-ish: only Godot math types, and
-// all (de)serialization goes through Persistence so the on-disk shape lives in one place.
+// saved as JSON in user://levels/<id>.json. The Godot math types here map to/from a Godot-free DTO
+// (LevelDto) which owns the JSON shape, so serialization can be unit-tested without the engine.
 public sealed class Level
 {
     public const int CurrentVersion = 1;
@@ -16,40 +16,59 @@ public sealed class Level
     public List<Pose> Gates = new();
     public List<Prop> Props = new();
 
-    public Godot.Collections.Dictionary ToDict()
+    public string ToJson() => ToDto().ToJson();
+    public static Level FromJson(string json) => FromDto(LevelDto.FromJson(json));
+
+    public LevelDto ToDto()
     {
-        var gates = new Godot.Collections.Array();
-        foreach (Pose g in Gates) gates.Add(Persistence.PoseDict(g.Pos, g.Rot));
-        var props = new Godot.Collections.Array();
-        foreach (Prop p in Props) props.Add(p.ToDict());
-        return new Godot.Collections.Dictionary
+        var dto = new LevelDto
         {
-            { "version", Version }, { "id", Id }, { "name", Name },
-            { "ground", Ground.ToDict() },
-            { "gates", gates }, { "props", props },
+            version = Version, id = Id, name = Name,
+            ground = new GroundDto { color = new[] { Ground.Color.R, Ground.Color.G, Ground.Color.B } },
+            gates = new GateDto[Gates.Count],
+            props = new PropDto[Props.Count],
         };
+        for (int i = 0; i < Gates.Count; i++)
+        {
+            Pose g = Gates[i];
+            dto.gates[i] = new GateDto { x = g.Pos.X, y = g.Pos.Y, z = g.Pos.Z, qx = g.Rot.X, qy = g.Rot.Y, qz = g.Rot.Z, qw = g.Rot.W };
+        }
+        for (int i = 0; i < Props.Count; i++)
+        {
+            Prop p = Props[i];
+            dto.props[i] = new PropDto
+            {
+                type = p.Type, solid = p.Solid,
+                pos = new[] { p.Pos.X, p.Pos.Y, p.Pos.Z },
+                rot = new[] { p.Rot.X, p.Rot.Y, p.Rot.Z, p.Rot.W },
+                scale = new[] { p.Scale.X, p.Scale.Y, p.Scale.Z },
+                color = new[] { p.Color.R, p.Color.G, p.Color.B },
+            };
+        }
+        return dto;
     }
 
-    public static Level FromDict(Godot.Collections.Dictionary d)
+    public static Level FromDto(LevelDto dto)
     {
-        var lvl = new Level
-        {
-            Version = d.ContainsKey("version") ? d["version"].AsInt32() : 1,
-            Id = d.ContainsKey("id") ? d["id"].AsString() : "",
-            Name = d.ContainsKey("name") ? d["name"].AsString() : "",
-            Ground = d.ContainsKey("ground") ? GroundDef.FromDict(d["ground"].AsGodotDictionary()) : new GroundDef(),
-        };
-        if (d.ContainsKey("gates"))
-            foreach (Variant v in d["gates"].AsGodotArray())
+        var lvl = new Level { Version = dto.version, Id = dto.id, Name = dto.name };
+        if (dto.ground?.color is { Length: >= 3 } gc) lvl.Ground.Color = new Color(gc[0], gc[1], gc[2]);
+        foreach (GateDto g in dto.gates ?? System.Array.Empty<GateDto>())
+            lvl.Gates.Add(new Pose { Pos = new Vector3(g.x, g.y, g.z), Rot = new Quaternion(g.qx, g.qy, g.qz, g.qw) });
+        foreach (PropDto p in dto.props ?? System.Array.Empty<PropDto>())
+            lvl.Props.Add(new Prop
             {
-                var gd = v.AsGodotDictionary();
-                lvl.Gates.Add(new Pose { Pos = Persistence.ReadPos(gd), Rot = Persistence.ReadRot(gd) });
-            }
-        if (d.ContainsKey("props"))
-            foreach (Variant v in d["props"].AsGodotArray())
-                lvl.Props.Add(Prop.FromDict(v.AsGodotDictionary()));
+                Type = p.type ?? "rock", Solid = p.solid,
+                Pos = Vec3(p.pos), Rot = Quat(p.rot), Scale = Vec3(p.scale, 1f), Color = Col(p.color),
+            });
         return lvl;
     }
+
+    private static Vector3 Vec3(float[] a, float fallback = 0f) =>
+        a is { Length: >= 3 } ? new Vector3(a[0], a[1], a[2]) : new Vector3(fallback, fallback, fallback);
+    private static Quaternion Quat(float[] a) =>
+        a is { Length: >= 4 } ? new Quaternion(a[0], a[1], a[2], a[3]) : Quaternion.Identity;
+    private static Color Col(float[] a) =>
+        a is { Length: >= 3 } ? new Color(a[0], a[1], a[2]) : new Color(0.42f, 0.42f, 0.44f);
 
     public Level Clone()
     {
@@ -65,20 +84,12 @@ public struct Pose { public Vector3 Pos; public Quaternion Rot; }
 // The environment floor. Only a colour today; the socket for real terrain later (height, type, ...).
 public sealed class GroundDef
 {
-    public Color Color = new(0.13f, 0.16f, 0.20f);   // matches the default grid ground base
-
-    public Godot.Collections.Dictionary ToDict() => new() { { "color", ColorArr(Color) } };
-
-    public static GroundDef FromDict(Godot.Collections.Dictionary d) =>
-        new() { Color = d.ContainsKey("color") ? ArrColor(d["color"].AsGodotArray()) : new Color(0.13f, 0.16f, 0.20f) };
-
-    public static Godot.Collections.Array ColorArr(Color c) => new() { c.R, c.G, c.B };
-    public static Color ArrColor(Godot.Collections.Array a) =>
-        a.Count >= 3 ? new Color(a[0].AsSingle(), a[1].AsSingle(), a[2].AsSingle()) : Colors.Gray;
+    public Color Color = new(0.13f, 0.16f, 0.20f);
 }
 
-// A placed object: a registered type, a full transform (position/rotation/scale = resizable) and a
-// tint colour. Extend by registering a new type in PropTypes - the format never changes.
+// A placed object: a registered type, a full transform (position/rotation/scale = resizable), a tint
+// colour and a solid flag (collidable obstacle vs decoration). Extend by registering a new type in
+// PropTypes - the format never changes.
 public sealed class Prop
 {
     public string Type = "rock";
@@ -86,28 +97,7 @@ public sealed class Prop
     public Quaternion Rot = Quaternion.Identity;
     public Vector3 Scale = Vector3.One;
     public Color Color = new(0.42f, 0.42f, 0.44f);
-    public bool Solid = true;   // collidable obstacle (hitting it resets the lap); false = decorative
-
-    public Godot.Collections.Dictionary ToDict() => new()
-    {
-        { "type", Type },
-        { "pos", new Godot.Collections.Array { Pos.X, Pos.Y, Pos.Z } },
-        { "rot", new Godot.Collections.Array { Rot.X, Rot.Y, Rot.Z, Rot.W } },
-        { "scale", new Godot.Collections.Array { Scale.X, Scale.Y, Scale.Z } },
-        { "color", GroundDef.ColorArr(Color) },
-        { "solid", Solid },
-    };
-
-    public static Prop FromDict(Godot.Collections.Dictionary d)
-    {
-        var p = new Prop { Type = d.ContainsKey("type") ? d["type"].AsString() : "rock" };
-        if (d.ContainsKey("pos")) { var a = d["pos"].AsGodotArray(); p.Pos = new Vector3(a[0].AsSingle(), a[1].AsSingle(), a[2].AsSingle()); }
-        if (d.ContainsKey("rot")) { var a = d["rot"].AsGodotArray(); p.Rot = new Quaternion(a[0].AsSingle(), a[1].AsSingle(), a[2].AsSingle(), a[3].AsSingle()); }
-        if (d.ContainsKey("scale")) { var a = d["scale"].AsGodotArray(); p.Scale = new Vector3(a[0].AsSingle(), a[1].AsSingle(), a[2].AsSingle()); }
-        if (d.ContainsKey("color")) p.Color = GroundDef.ArrColor(d["color"].AsGodotArray());
-        if (d.ContainsKey("solid")) p.Solid = d["solid"].AsBool();
-        return p;
-    }
+    public bool Solid = true;
 
     public Prop Clone() => new() { Type = Type, Pos = Pos, Rot = Rot, Scale = Scale, Color = Color, Solid = Solid };
 }

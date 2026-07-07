@@ -35,4 +35,21 @@ public static class Persistence
         data = Json.ParseString(f.GetAsText());
         return true;
     }
+
+    // Raw text I/O (used for level files, which serialise themselves via System.Text.Json).
+    public static void WriteText(string path, string text)
+    {
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Write);
+        f?.StoreString(text);
+    }
+
+    public static bool TryReadText(string path, out string text)
+    {
+        text = "";
+        if (!FileAccess.FileExists(path)) return false;
+        using var f = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (f == null) return false;
+        text = f.GetAsText();
+        return true;
+    }
 }
