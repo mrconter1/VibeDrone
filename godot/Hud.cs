@@ -82,7 +82,7 @@ public partial class Hud : Control
 
         // debug overlay (opt-in via Esc menu)
         if (ShowDebug)
-            Text(40, sz.Y - 40, $"[{Mode}]  {Fps:0} FPS   FOV {Fov:0}   SND {Sound}   t {TimeSec:0.0}s", 15, dim);
+            Text(40, sz.Y - 40, $"[{Mode}]  {Fps:0} FPS   FOV {Fov:0}   SND {Sound}   t {TimeSec:0.0}s   R rebuild+relaunch", 15, dim);
     }
 
     private static string FmtTime(float t)

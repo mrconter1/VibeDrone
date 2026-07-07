@@ -135,8 +135,19 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(_edit);
 
-        SetLevelIndex(0);       // load the first level (gates + props), pre-build a race behind the menu
-        _coord.OpenMain();      // ...but open on the title screen
+        // A dev rebuild+relaunch (debug R) drops straight back into the level it was on; otherwise
+        // load the first level behind the title screen.
+        string devLevel = ConsumeDevRelaunch();
+        if (devLevel.Length > 0)
+        {
+            SetLevelIndex(LevelStore.IndexOf(devLevel));
+            _coord.ResumeGame();
+        }
+        else
+        {
+            SetLevelIndex(0);
+            _coord.OpenMain();
+        }
     }
 
     public override void _Input(InputEvent ev)
@@ -155,8 +166,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
         {
-            _sessionLog.Mark("race start");
-            StartRace();
+            if (_showDebug) DevRebuildRelaunch();   // dev hot-reload: rebuild + relaunch this level
+            else { _sessionLog.Mark("race start"); StartRace(); }
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.H })
         {
@@ -395,6 +406,33 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _arena.LoadLevel(LevelStore.Load(id));   // fires GatesChanged -> WireGates
         _recorder.SetLevel(id);
         StartRace();
+    }
+
+    private const string DevRelaunchPath = "user://dev_relaunch.txt";
+
+    // Debug R: save the current level, then spawn a detached helper that waits for THIS process to
+    // exit (so the C# assembly file unlocks), rebuilds, and relaunches Godot on the same level.
+    private void DevRebuildRelaunch()
+    {
+        Persistence.WriteText(DevRelaunchPath, LevelStore.IdAt(_levelIndex));
+        string proj = ProjectSettings.GlobalizePath("res://").TrimEnd('/');
+        string godot = OS.GetExecutablePath();
+        int pid = OS.GetProcessId();
+        string cmd = $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue; " +
+                     $"dotnet build \"{proj}\"; & \"{godot}\" --path \"{proj}\"";
+        OS.CreateProcess("powershell.exe", new[] { "-NoProfile", "-Command", cmd });
+        GetTree().Quit();
+    }
+
+    // Read + clear the dev-relaunch marker; returns the level id to resume into, or "".
+    private static string ConsumeDevRelaunch()
+    {
+        if (Persistence.TryReadText(DevRelaunchPath, out string id) && id.Trim().Length > 0)
+        {
+            DirAccess.RemoveAbsolute(DevRelaunchPath);
+            return id.Trim();
+        }
+        return "";
     }
 
     private void StartRace()
