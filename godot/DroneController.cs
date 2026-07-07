@@ -417,7 +417,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // the marker, rebuilds the latest code, and relaunches Godot, which resumes this level.
     private void RequestDevReload()
     {
-        Persistence.WriteText(DevRelaunchPath, LevelStore.IdAt(_levelIndex));
+        string id = LevelStore.IdAt(_levelIndex);
+        Persistence.WriteText(DevRelaunchPath, id);
+        GD.Print($"[dev] reload requested for '{id}' - quitting for the supervisor to rebuild");
         GetTree().Quit();
     }
 
