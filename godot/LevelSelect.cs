@@ -7,7 +7,7 @@ public partial class LevelSelect : MenuScreen
 {
     private VBoxContainer _rows = null!;
     private Label _detName = null!, _detBest = null!, _detList = null!;
-    private Button _watch = null!, _firstRow = null!;
+    private Button _watch = null!, _delete = null!, _firstRow = null!;
     private int _focused;
 
     protected override void OnShow() { Rebuild(); _firstRow?.CallDeferred(Control.MethodName.GrabFocus); }
@@ -44,6 +44,9 @@ public partial class LevelSelect : MenuScreen
         var clear = UiTheme.MenuItem("Clear records", () => { Ctrl.ClearRecords(_focused); Rebuild(); }, 260f);
         clear.AddThemeColorOverride("font_color", UiTheme.TextDim);
         det.AddChild(clear);
+        _delete = UiTheme.MenuItem("Delete level", () => { Ctrl.DeleteLevel(_focused); Rebuild(); }, 260f);
+        _delete.AddThemeColorOverride("font_color", UiTheme.TextDim);
+        det.AddChild(_delete);
 
         col.AddChild(UiTheme.MenuItem("‹  Back", () => Ctrl.MenuBack(), 200f));
         col.AddChild(UiTheme.Body("↑ ↓  select      Enter  race      Esc / Space  back", UiTheme.TextDim, 15));
@@ -77,6 +80,7 @@ public partial class LevelSelect : MenuScreen
     private void SetDetails(int i)
     {
         _focused = i;
+        _delete.Visible = !Ctrl.IsBuiltInLevel(i);   // built-ins can't be deleted
         _detName.Text = Ctrl.LevelNameAt(i);
         float best = Ctrl.BestLapAt(i);
         _detBest.Text = best > 0f ? $"BEST  {FmtTime(best)}" : "no times yet";

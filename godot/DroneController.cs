@@ -50,6 +50,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
+    private EditController _edit = null!;
 
     // --- menu system ---
     private ScreenCoordinator _coord = null!;
@@ -129,9 +130,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
             _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam);
         _coord.ApplyAA();   // MSAA + FXAA (fixes edge/checker shimmer)
 
-        var edit = new EditController();
-        edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
-        AddChild(edit);
+        _edit = new EditController();
+        _edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
+        AddChild(_edit);
 
         SetLevelIndex(0);       // load the first level (gates + props), pre-build a race behind the menu
         _coord.OpenMain();      // ...but open on the title screen
@@ -343,6 +344,26 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     public string LevelNameAt(int i) => LevelStore.NameAt(i);
     public float BestLapAt(int i) => LapRecorder.BestLapFor(LevelStore.IdAt(i));
     public float[] TopLapsAt(int i) => LapRecorder.TopLapsFor(LevelStore.IdAt(i));
+    public bool IsBuiltInLevel(int i) => LevelStore.IsBuiltIn(i);
+
+    // Main-menu Create: make a fresh user level (starter loop) and drop into the builder on it.
+    public void CreateLevel()
+    {
+        SetLevelIndex(LevelStore.Create());
+        _coord.ResumeGame();   // leave the menus, gameplay camera, unpause
+        _edit.Open();          // ...and open the free-fly builder
+    }
+
+    // Delete a user level (built-ins are protected); if it was active, fall back to the first level.
+    public void DeleteLevel(int index)
+    {
+        if (LevelStore.IsBuiltIn(index)) return;
+        string delId = LevelStore.IdAt(index);
+        string curId = LevelStore.IdAt(_levelIndex);
+        LevelStore.Delete(delId);
+        if (curId == delId) SetLevelIndex(0);
+        else _levelIndex = LevelStore.IndexOf(curId);
+    }
 
     // --- menu navigation: thin delegators to the ScreenCoordinator (called by the menu screens) ---
     public void StartGame() => _coord.StartGame();

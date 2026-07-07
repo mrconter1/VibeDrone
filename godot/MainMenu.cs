@@ -22,6 +22,7 @@ public partial class MainMenu : MenuScreen
         _first = UiTheme.MenuItem("Start", () => Ctrl.StartGame());
         v.AddChild(_first);
         v.AddChild(UiTheme.MenuItem("Levels", () => Ctrl.OpenLevels(fromPause: false)));
+        v.AddChild(UiTheme.MenuItem("Create", () => Ctrl.CreateLevel()));
         v.AddChild(UiTheme.MenuItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
         v.AddChild(UiTheme.MenuItem("Exit", () => GetTree().Quit()));
     }

@@ -158,6 +158,9 @@ public partial class EditController : Node3D
         if (_grabbed == null) _arena.SaveEdits();   // hovered edit is immediate; carried saves on drop
     }
 
+    // Enter the builder from code (e.g. right after creating a new level).
+    public void Open() { if (!_active) Toggle(); }
+
     private void Toggle()
     {
         _active = !_active;
