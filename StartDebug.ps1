@@ -54,6 +54,19 @@ Remove-Item $Marker -Force -ErrorAction SilentlyContinue
 $env:OPENDRONE_DEV = "1"        # tells the game it is supervised (debug R hot-reloads)
 $ErrorActionPreference = "Continue"   # native stderr via 2>&1 must not abort the loop
 
+# Known-benign D3D12 driver chatter (startup PSO note + shutdown buffer-cleanup warning).
+$Noise = @('PSO caching is not implemented', 'pipeline_cache_create', 'Pages in use exist at exit', 'PagedAllocator')
+
+# Godot is a native exe; in PS 5.1, `2>&1` wraps each stderr line in a NativeCommandError object that
+# renders as a scary error block. Convert those back to plain text and drop the benign D3D12 lines.
+function Clean-Output {
+    process {
+        $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
+        foreach ($p in $Noise) { if ($line -like "*$p*") { return } }
+        $line
+    }
+}
+
 $iteration = 0
 do {
     $iteration++
@@ -61,13 +74,13 @@ do {
 
     Log "BUILD start"
     Push-Location $GodotDir
-    dotnet build 2>&1 | Tee-Object -FilePath $Log -Append | Out-Host
+    dotnet build 2>&1 | Clean-Output | Tee-Object -FilePath $Log -Append | Out-Host
     $ok = $LASTEXITCODE -eq 0
     Pop-Location
     Log ("BUILD result: " + $(if ($ok) { "OK" } else { "FAILED (launching previous build - fix and press R again)" }))
 
     Log "LAUNCH game"
-    & $Godot --path $GodotDir 2>&1 | Tee-Object -FilePath $Log -Append | Out-Host
+    & $Godot --path $GodotDir 2>&1 | Clean-Output | Tee-Object -FilePath $Log -Append | Out-Host
     Log "GAME exited (code $LASTEXITCODE)"
 
     $reload = Test-Path $Marker    # written by debug R, consumed by the game on the next boot
