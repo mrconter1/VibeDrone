@@ -16,7 +16,7 @@ public partial class LevelSelect : MenuScreen
 
     protected override void Build()
     {
-        VBoxContainer col = CenteredPanel(new Vector2(880, 560), sep: 16);
+        VBoxContainer col = CenteredPanel(new Vector2(940, 620), sep: 16);
 
         col.AddChild(UiTheme.Title("LEVELS", 46));
 
@@ -35,7 +35,8 @@ public partial class LevelSelect : MenuScreen
         det.AddChild(_detName);
         _detBest = UiTheme.Body("", UiTheme.Good, 20);
         det.AddChild(_detBest);
-        _preview = new MapPreview { CustomMinimumSize = new Vector2(300, 170) };
+        det.AddChild(UiTheme.Body("MAP", UiTheme.TextDim, 14));
+        _preview = new MapPreview { CustomMinimumSize = new Vector2(360, 230) };
         det.AddChild(_preview);
         det.AddChild(new HSeparator());
         det.AddChild(UiTheme.Body("TOP LAPS", UiTheme.TextDim, 14));
