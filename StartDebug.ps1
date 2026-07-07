@@ -74,7 +74,9 @@ do {
 
     Log "BUILD start"
     Push-Location $GodotDir
-    dotnet build 2>&1 | Clean-Output | Tee-Object -FilePath $Log -Append | Out-Host
+    # --no-incremental: the incremental build occasionally reports success without recompiling
+    # (stale assembly), which would relaunch old code. A full build is a couple of seconds and safe.
+    dotnet build --no-incremental 2>&1 | Clean-Output | Tee-Object -FilePath $Log -Append | Out-Host
     $ok = $LASTEXITCODE -eq 0
     Pop-Location
     Log ("BUILD result: " + $(if ($ok) { "OK" } else { "FAILED (launching previous build - fix and press R again)" }))
