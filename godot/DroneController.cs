@@ -42,14 +42,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private Arena _arena = null!;
 
     // lap timing state
-    private bool _raceArmed;       // sitting fixed at the start, waiting for the first input
-    private bool _raceRunning;     // clock ticking
-    private float _lapTime;        // current lap elapsed
+    private readonly RaceState _race = new();   // armed/running/lap-time/gate-progress/miss tracking
     private float _armThrottle;    // throttle baseline (settles over the first moments)
     private float _armSettle;      // time armed; input is ignored until it settles
-    private int _gatePassed;       // regular gates cleared this lap (need all before the finish counts)
-    private int _missGate = -1;    // gate index the miss-detector is tracking
-    private float _missPrevZ;      // drone's previous local-Z vs that gate (plane-crossing test)
     private bool _gateHit;         // drone touched a gate bar this frame
     private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
 
@@ -172,14 +167,14 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // Visual-only (ghost + trail) at render rate, not the 250 Hz physics rate.
     public override void _Process(double delta)
     {
-        if (_raceRunning) _recorder.UpdateVisuals(_lapTime, true);
+        if (_race.Running) _recorder.UpdateVisuals(_race.LapTime, true);
         else _recorder.HideGhost();
     }
 
     public override void _PhysicsProcess(double delta)
     {
         ReadInput(delta, out float roll, out float pitch, out float yaw, out float throttle);
-        if (_raceArmed && !TryStart(delta, roll, pitch, yaw, throttle)) return;   // holding at the start line
+        if (_race.Armed && !TryStart(delta, roll, pitch, yaw, throttle)) return;   // holding at the start line
         StepFlight(delta, roll, pitch, yaw, throttle);
         if (CheckRaceEvents(delta)) return;                                        // restarted this tick
         DriveAudio(roll, pitch, yaw, throttle);
@@ -225,7 +220,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         {
             bool go = Mathf.Abs(throttle - _armThrottle) > 0.08f
                    || Mathf.Abs(roll) > 0.06f || Mathf.Abs(pitch) > 0.06f || Mathf.Abs(yaw) > 0.06f;
-            if (go) { _raceArmed = false; _raceRunning = true; BeginLap(); return true; }
+            if (go) { _race.Launch(); _recorder.BeginLap(); return true; }
         }
         _curThrottle = throttle; _audio.SetEffort(0f); _recorder.HideGhost();   // idle: no clock, no ghost
         ApplyHud("LIVE");
@@ -248,9 +243,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // gate / hit the ground -> back to the start line, same as R). Returns true if it restarted.
     private bool CheckRaceEvents(double delta)
     {
-        if (!_raceRunning) return false;
-        _lapTime += (float)delta;
-        _recorder.Record((float)delta, _lapTime, _drone.GlobalPosition, _drone.GlobalTransform.Basis.GetRotationQuaternion());
+        if (!_race.Running) return false;
+        _race.Tick((float)delta);
+        _recorder.Record((float)delta, _race.LapTime, _drone.GlobalPosition, _drone.GlobalTransform.Basis.GetRotationQuaternion());
         if (_gateHit || MissedGate() || _drone.GlobalPosition.Y < 0.5f) { StartRace(); return true; }
         return false;
     }
@@ -384,20 +379,11 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private void StartRace()
     {
         ResetDrone();          // spawn fixed in the start/finish gate
-        _lapTime = 0f;
-        _gatePassed = 0;
-        _raceRunning = false;
-        _raceArmed = true;     // clock starts on first input
+        _race.Arm();           // clock starts on first input
         _armSettle = 0f;
         _gateHit = false;
         _recorder.HideGhost();
-        BeginLap();
-    }
-
-    private void BeginLap()
-    {
         _recorder.BeginLap();
-        _missGate = -1;
     }
 
     // True if the drone flew forward THROUGH the next expected gate's plane but outside its
@@ -405,14 +391,10 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private bool MissedGate()
     {
         int regular = _arena.GateTriggers.Count - 1;
-        int nextIdx = RaceLogic.NextGate(_gatePassed, regular);
+        int nextIdx = _race.NextGate(regular);
         if (nextIdx >= _arena.Gates.Count) return false;
         Vector3 local = _arena.Gates[nextIdx].GlobalTransform.AffineInverse() * _drone.GlobalPosition;
-        // only judge a miss once we have a previous sample for THIS gate (same-gate plane crossing)
-        bool missed = nextIdx == _missGate && RaceLogic.FlewPastGate(_missPrevZ, local.X, local.Y, local.Z);
-        _missGate = nextIdx;
-        _missPrevZ = local.Z;
-        return missed;
+        return _race.UpdateMiss(nextIdx, local.X, local.Y, local.Z);
     }
 
     // Fired by a gate's Area3D when a body enters it. Regular gates (1..n-1) advance the lap in
@@ -420,20 +402,12 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // (re)starts the timer for the next lap.
     private void OnGatePassed(int index, Node3D body)
     {
-        if (!_raceRunning || body != _drone) return;
+        if (!_race.Running || body != _drone) return;
         int regular = _arena.GateTriggers.Count - 1;    // gates 1..n-1
-        if (index == 0)                                  // start/finish line
-        {
-            if (RaceLogic.LapValid(_gatePassed, regular)) // valid lap: all gates cleared
-                _recorder.CompleteLap(_lapTime);         // records the lap + best ghost
-            _lapTime = 0f;                               // (re)start the lap timer
-            _gatePassed = 0;
-            BeginLap();
-        }
-        else if (RaceLogic.IsNextRegular(index, _gatePassed))   // next regular gate, in order
-        {
-            _gatePassed++;
-        }
+        float lap = _race.LapTime;                       // captured before RegisterGate resets it
+        GateResult result = _race.RegisterGate(index, regular);
+        if (result == GateResult.FinishValid) _recorder.CompleteLap(lap);   // records the lap + best ghost
+        if (result is GateResult.FinishValid or GateResult.FinishInvalid) _recorder.BeginLap();
     }
 
     public void SetShowDebug(bool on) => _showDebug = on;
@@ -470,18 +444,18 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _osd.Sound = _audio.CurrentName;
         _osd.ShowDebug = _showDebug;
         int regular = _arena.GateTriggers.Count - 1;
-        _osd.LapTime = _lapTime;
+        _osd.LapTime = _race.LapTime;
         _osd.LastLap = _recorder.LastLap;
         _osd.BestLap = _recorder.BestLap;
         _osd.Ranks = _recorder.Ranks;
         _osd.LevelName = _arena.LevelName;
         // rebuild the status string only when it changes (avoids a per-tick string alloc)
-        int key = _raceArmed ? -1 : _raceRunning ? _gatePassed : -2;
+        int key = _race.Armed ? -1 : _race.Running ? _race.GatePassed : -2;
         if (key != _statusKey)
         {
             _statusKey = key;
-            _statusText = _raceArmed ? "GO!  (throttle up)"
-                        : _raceRunning ? $"gate {_gatePassed}/{regular}" : "R to start";
+            _statusText = _race.Armed ? "GO!  (throttle up)"
+                        : _race.Running ? $"gate {_race.GatePassed}/{regular}" : "R to start";
         }
         _osd.RaceStatus = _statusText;
         // climb angle (pitch) and roll from the drone basis, for the artificial horizon
