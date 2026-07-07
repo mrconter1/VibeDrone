@@ -1,65 +1,21 @@
 using Godot;
 
-// The Levels screen: a list of tracks (name + best lap) on the left, a details panel on the right
-// showing the focused track's top times and a "Watch best run" button. Up/down moves the focus,
-// Enter races the focused track, Esc goes back. Reachable from the main menu and the pause menu.
-public partial class LevelSelect : CanvasLayer
+// The Levels screen: a list of levels (name + best lap) on the left, a details panel on the right
+// with the focused level's top times, "Watch best run" and "Clear records". Up/down moves the focus,
+// Enter races, Esc/Space go back. Reachable from the main menu and the pause menu.
+public partial class LevelSelect : MenuScreen
 {
-    private DroneController _ctrl = null!;
     private VBoxContainer _rows = null!;
     private Label _detName = null!, _detBest = null!, _detList = null!;
     private Button _watch = null!, _firstRow = null!;
     private int _focused;
 
-    public void Setup(DroneController ctrl) => _ctrl = ctrl;
+    protected override void OnShow() { Rebuild(); _firstRow?.CallDeferred(Control.MethodName.GrabFocus); }
+    protected override void Back() => Ctrl.MenuBack();
 
-    public override void _Ready()
+    protected override void Build()
     {
-        ProcessMode = ProcessModeEnum.Always;
-        Layer = 11;
-        BuildUi();
-        Visible = false;
-    }
-
-    public void Show(bool on)
-    {
-        Visible = on;
-        if (on) { Rebuild(); _firstRow?.CallDeferred(Control.MethodName.GrabFocus); }
-    }
-
-    public override void _Input(InputEvent ev)
-    {
-        if (Visible && UiTheme.IsBack(ev))
-        {
-            _ctrl.MenuBack();
-            GetViewport().SetInputAsHandled();
-        }
-    }
-
-    private void BuildUi()
-    {
-        var root = new Control { Theme = UiTheme.Get() };
-        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        root.MouseFilter = Control.MouseFilterEnum.Ignore;
-        AddChild(root);
-
-        var center = new CenterContainer();
-        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        root.AddChild(center);
-
-        var panel = UiTheme.Panel();
-        panel.CustomMinimumSize = new Vector2(880, 560);
-        center.AddChild(panel);
-
-        var pad = new MarginContainer();
-        pad.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        foreach (var m in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
-            pad.AddThemeConstantOverride(m, 32);
-        panel.AddChild(pad);
-
-        var col = new VBoxContainer();
-        col.AddThemeConstantOverride("separation", 16);
-        pad.AddChild(col);
+        VBoxContainer col = CenteredPanel(new Vector2(880, 560), sep: 16);
 
         col.AddChild(UiTheme.Title("LEVELS", 46));
 
@@ -67,12 +23,10 @@ public partial class LevelSelect : CanvasLayer
         split.AddThemeConstantOverride("separation", 28);
         col.AddChild(split);
 
-        // left: track rows
         _rows = new VBoxContainer { CustomMinimumSize = new Vector2(360, 0) };
         _rows.AddThemeConstantOverride("separation", 6);
         split.AddChild(_rows);
 
-        // right: details
         var det = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         det.AddThemeConstantOverride("separation", 10);
         split.AddChild(det);
@@ -85,50 +39,49 @@ public partial class LevelSelect : CanvasLayer
         _detList = UiTheme.Body("", UiTheme.Text, 18);
         det.AddChild(_detList);
         det.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });   // push actions down
-        _watch = UiTheme.MenuItem("▶  Watch best run", () => _ctrl.WatchBest(_focused), 260f);
+        _watch = UiTheme.MenuItem("▶  Watch best run", () => Ctrl.WatchBest(_focused), 260f);
         det.AddChild(_watch);
-        var clear = UiTheme.MenuItem("Clear records", () => { _ctrl.ClearRecords(_focused); Rebuild(); }, 260f);
+        var clear = UiTheme.MenuItem("Clear records", () => { Ctrl.ClearRecords(_focused); Rebuild(); }, 260f);
         clear.AddThemeColorOverride("font_color", UiTheme.TextDim);
         det.AddChild(clear);
 
-        // footer: back button + hint
-        col.AddChild(UiTheme.MenuItem("‹  Back", () => _ctrl.MenuBack(), 200f));
+        col.AddChild(UiTheme.MenuItem("‹  Back", () => Ctrl.MenuBack(), 200f));
         col.AddChild(UiTheme.Body("↑ ↓  select      Enter  race      Esc / Space  back", UiTheme.TextDim, 15));
     }
 
-    // Rebuild the track rows (best times may have changed) and focus the current track.
+    // Rebuild the level rows (best times may have changed) and focus the current level.
     private void Rebuild()
     {
         foreach (Node c in _rows.GetChildren()) c.QueueFree();
         _firstRow = null!;
 
-        for (int i = 0; i < _ctrl.LevelCount; i++)
+        for (int i = 0; i < Ctrl.LevelCount; i++)
         {
             int idx = i;
-            bool current = i == _ctrl.LevelIndex;
+            bool current = i == Ctrl.LevelIndex;
             var row = new Button
             {
                 Alignment = HorizontalAlignment.Left,
                 CustomMinimumSize = new Vector2(360, 46),
                 FocusMode = Control.FocusModeEnum.All,
-                Text = (current ? "▸ " : "   ") + _ctrl.LevelNameAt(i).PadRight(16) + FmtTime(_ctrl.BestLapAt(i)),
+                Text = (current ? "▸ " : "   ") + Ctrl.LevelNameAt(i).PadRight(16) + FmtTime(Ctrl.BestLapAt(i)),
             };
-            row.Pressed += () => _ctrl.PlayLevel(idx);
+            row.Pressed += () => Ctrl.PlayLevel(idx);
             row.FocusEntered += () => SetDetails(idx);
             _rows.AddChild(row);
-            if (i == _ctrl.LevelIndex || _firstRow == null) _firstRow = row;
+            if (i == Ctrl.LevelIndex || _firstRow == null) _firstRow = row;
         }
-        SetDetails(_ctrl.LevelIndex);
+        SetDetails(Ctrl.LevelIndex);
     }
 
     private void SetDetails(int i)
     {
         _focused = i;
-        _detName.Text = _ctrl.LevelNameAt(i);
-        float best = _ctrl.BestLapAt(i);
+        _detName.Text = Ctrl.LevelNameAt(i);
+        float best = Ctrl.BestLapAt(i);
         _detBest.Text = best > 0f ? $"BEST  {FmtTime(best)}" : "no times yet";
 
-        float[] laps = _ctrl.TopLapsAt(i);
+        float[] laps = Ctrl.TopLapsAt(i);
         if (laps.Length == 0) { _detList.Text = "-"; _watch.Disabled = true; return; }
         _watch.Disabled = false;
         string s = "";
