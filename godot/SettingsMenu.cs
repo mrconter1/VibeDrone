@@ -30,7 +30,7 @@ public partial class SettingsMenu : CanvasLayer
 
     public override void _Input(InputEvent ev)
     {
-        if (Visible && ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        if (Visible && UiTheme.IsBack(ev))
         {
             _ctrl.MenuBack();
             GetViewport().SetInputAsHandled();
@@ -49,7 +49,7 @@ public partial class SettingsMenu : CanvasLayer
         root.AddChild(center);
 
         var panel = UiTheme.Panel();
-        panel.CustomMinimumSize = new Vector2(520, 360);
+        panel.CustomMinimumSize = new Vector2(600, 430);
         center.AddChild(panel);
 
         var pad = new MarginContainer();
@@ -62,7 +62,7 @@ public partial class SettingsMenu : CanvasLayer
         v.AddThemeConstantOverride("separation", 16);
         pad.AddChild(v);
 
-        v.AddChild(UiTheme.Title("SETTINGS", 40));
+        v.AddChild(UiTheme.Title("SETTINGS", 46));
         v.AddChild(new HSeparator());
 
         // master volume
@@ -88,8 +88,9 @@ public partial class SettingsMenu : CanvasLayer
         // advanced sound test (the existing dev panel)
         v.AddChild(UiTheme.MenuItem("Advanced sound test", () => { _ctrl.MenuBack(); _sound.SetOpen(true); }, 440f));
 
-        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 4) });
-        v.AddChild(UiTheme.Body("Esc  back", UiTheme.TextDim, 14));
+        v.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
+        v.AddChild(UiTheme.MenuItem("‹  Back", () => _ctrl.MenuBack(), 200f));
+        v.AddChild(UiTheme.Body("Esc / Space  back", UiTheme.TextDim, 15));
     }
 
     private string DebugLabel() => "HUD debug overlay:   " + (_ctrl.ShowDebug ? "ON" : "OFF");

@@ -25,7 +25,7 @@ public partial class PauseMenu : CanvasLayer
 
     public override void _Input(InputEvent ev)
     {
-        if (Visible && ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        if (Visible && UiTheme.IsBack(ev))
         {
             _ctrl.ResumeGame();
             GetViewport().SetInputAsHandled();
@@ -44,7 +44,7 @@ public partial class PauseMenu : CanvasLayer
         root.AddChild(center);
 
         var panel = UiTheme.Panel();
-        panel.CustomMinimumSize = new Vector2(360, 470);
+        panel.CustomMinimumSize = new Vector2(420, 660);
         center.AddChild(panel);
 
         var pad = new MarginContainer();
@@ -57,7 +57,7 @@ public partial class PauseMenu : CanvasLayer
         v.AddThemeConstantOverride("separation", 8);
         pad.AddChild(v);
 
-        v.AddChild(UiTheme.Title("PAUSED", 34));
+        v.AddChild(UiTheme.Title("PAUSED", 38));
         v.AddChild(new HSeparator());
 
         _first = UiTheme.MenuItem("Resume", () => _ctrl.ResumeGame(), 300f);

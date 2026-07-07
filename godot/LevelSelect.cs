@@ -29,7 +29,7 @@ public partial class LevelSelect : CanvasLayer
 
     public override void _Input(InputEvent ev)
     {
-        if (Visible && ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        if (Visible && UiTheme.IsBack(ev))
         {
             _ctrl.MenuBack();
             GetViewport().SetInputAsHandled();
@@ -48,7 +48,7 @@ public partial class LevelSelect : CanvasLayer
         root.AddChild(center);
 
         var panel = UiTheme.Panel();
-        panel.CustomMinimumSize = new Vector2(780, 500);
+        panel.CustomMinimumSize = new Vector2(880, 560);
         center.AddChild(panel);
 
         var pad = new MarginContainer();
@@ -61,7 +61,7 @@ public partial class LevelSelect : CanvasLayer
         col.AddThemeConstantOverride("separation", 16);
         pad.AddChild(col);
 
-        col.AddChild(UiTheme.Title("LEVELS", 40));
+        col.AddChild(UiTheme.Title("LEVELS", 46));
 
         var split = new HBoxContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         split.AddThemeConstantOverride("separation", 28);
@@ -91,8 +91,9 @@ public partial class LevelSelect : CanvasLayer
         clear.AddThemeColorOverride("font_color", UiTheme.TextDim);
         det.AddChild(clear);
 
-        // footer hint
-        col.AddChild(UiTheme.Body("↑ ↓  select      Enter  race      Esc  back", UiTheme.TextDim, 14));
+        // footer: back button + hint
+        col.AddChild(UiTheme.MenuItem("‹  Back", () => _ctrl.MenuBack(), 200f));
+        col.AddChild(UiTheme.Body("↑ ↓  select      Enter  race      Esc / Space  back", UiTheme.TextDim, 15));
     }
 
     // Rebuild the track rows (best times may have changed) and focus the current track.

@@ -53,7 +53,7 @@ public partial class HelpOverlay : CanvasLayer
         root.AddChild(center);
 
         var panel = UiTheme.Panel();
-        panel.CustomMinimumSize = new Vector2(520, 420);
+        panel.CustomMinimumSize = new Vector2(600, 470);
         center.AddChild(panel);
 
         var pad = new MarginContainer();
@@ -66,7 +66,7 @@ public partial class HelpOverlay : CanvasLayer
         v.AddThemeConstantOverride("separation", 10);
         pad.AddChild(v);
 
-        v.AddChild(UiTheme.Title("CONTROLS", 34));
+        v.AddChild(UiTheme.Title("CONTROLS", 38));
         v.AddChild(new HSeparator());
 
         foreach (var (action, keys) in Bindings)
@@ -80,6 +80,7 @@ public partial class HelpOverlay : CanvasLayer
         }
 
         v.AddChild(new HSeparator());
-        v.AddChild(UiTheme.Body("press any key to close", UiTheme.TextDim, 14));
+        v.AddChild(UiTheme.MenuItem("‹  Back", () => _ctrl.CloseHelp(), 200f));
+        v.AddChild(UiTheme.Body("press any key to close", UiTheme.TextDim, 15));
     }
 }

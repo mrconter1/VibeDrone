@@ -27,7 +27,7 @@ public static class UiTheme
     public static Theme Get()
     {
         if (_theme != null) return _theme;
-        var t = new Theme { DefaultFont = BodyFont, DefaultFontSize = 17 };
+        var t = new Theme { DefaultFont = BodyFont, DefaultFontSize = 20 };
 
         // panels: frosted dark fill + hairline border + rounded corners
         t.SetStylebox("panel", "Panel", Sb(Surface, Border, 1, 14, 0));
@@ -43,7 +43,7 @@ public static class UiTheme
         t.SetColor("font_hover_color",   "Button", Text);
         t.SetColor("font_focus_color",   "Button", Accent);
         t.SetColor("font_pressed_color", "Button", Accent);
-        t.SetFontSize("font_size", "Button", 18);
+        t.SetFontSize("font_size", "Button", 21);
 
         t.SetColor("font_color", "Label", Text);
         return _theme = t;
@@ -81,18 +81,22 @@ public static class UiTheme
     }
 
     // A full-width menu item (left aligned), focusable for arrow-key navigation.
-    public static Button MenuItem(string text, Action onPressed, float minWidth = 320f)
+    public static Button MenuItem(string text, Action onPressed, float minWidth = 340f)
     {
         var b = new Button
         {
             Text = text,
             Alignment = HorizontalAlignment.Left,
-            CustomMinimumSize = new Vector2(minWidth, 48),
+            CustomMinimumSize = new Vector2(minWidth, 56),
             FocusMode = Control.FocusModeEnum.All,
         };
         b.Pressed += onPressed;
         return b;
     }
+
+    // The "go back" keys, shared by every menu: Esc, Backspace, or Space.
+    public static bool IsBack(InputEvent ev) =>
+        ev is InputEventKey { Pressed: true, Keycode: Key.Escape or Key.Backspace or Key.Space };
 
     // --- stylebox helpers ---
     private static StyleBoxFlat Sb(Color bg, Color? border, int borderW, int radius, int pad)
@@ -104,14 +108,12 @@ public static class UiTheme
         return s;
     }
 
-    // focus: a soft accent wash with a bright accent bar down the left edge (clear keyboard cursor)
+    // focus: a filled accent pill (no edge bar) - the whole item lights up as the keyboard cursor
     private static StyleBoxFlat FocusBox()
     {
-        var s = new StyleBoxFlat { BgColor = new Color(Accent, 0.12f) };
+        var s = new StyleBoxFlat { BgColor = new Color(Accent, 0.18f) };
         s.SetCornerRadiusAll(8);
         s.SetContentMarginAll(10);
-        s.BorderColor = Accent;
-        s.BorderWidthLeft = 3;
         return s;
     }
 }

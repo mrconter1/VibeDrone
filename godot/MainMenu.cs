@@ -38,10 +38,10 @@ public partial class MainMenu : CanvasLayer
         v.AddThemeConstantOverride("separation", 10);
         center.AddChild(v);
 
-        v.AddChild(UiTheme.Title("OPENDRONE", 64));
-        var sub = UiTheme.Body("FPV TIME TRIAL", UiTheme.TextDim, 16);
+        v.AddChild(UiTheme.Title("OPENDRONE", 76));
+        var sub = UiTheme.Body("FPV TIME TRIAL", UiTheme.TextDim, 18);
         v.AddChild(sub);
-        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 28) });   // spacer
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 34) });   // spacer
 
         _first = UiTheme.MenuItem("Start", () => _ctrl.StartGame());
         v.AddChild(_first);

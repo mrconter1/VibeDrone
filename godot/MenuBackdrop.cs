@@ -22,22 +22,28 @@ public partial class MenuBackdrop : CanvasLayer
 
     private const string ShaderCode = @"
 shader_type canvas_item;
-// blur the frame rendered so far (the 3D arena), then darken + vignette for a frosted backdrop.
-uniform sampler2D screen : hint_screen_texture, filter_linear_mipmap;
-uniform float radius = 3.0;
+// Frosted backdrop: a smooth 5x5 Gaussian blur of the live arena (full-res linear sampling, so it
+// stays soft rather than blocky), then a dark tint + vignette. Runs only while a menu is open.
+uniform sampler2D screen : hint_screen_texture, filter_linear;
+uniform float radius = 2.2;
 uniform vec3 tint : source_color = vec3(0.03, 0.035, 0.045);
-uniform float tint_amt = 0.58;
-uniform float vignette = 0.55;
+uniform float tint_amt = 0.5;
+uniform float vignette = 0.5;
 void fragment() {
-    vec2 px = SCREEN_PIXEL_SIZE * radius;
+    vec2 ps = SCREEN_PIXEL_SIZE * radius;
+    float w[5] = float[](1.0, 4.0, 6.0, 4.0, 1.0);   // Gaussian weights
     vec3 c = vec3(0.0);
-    for (int x = -1; x <= 1; x++)
-        for (int y = -1; y <= 1; y++)
-            c += texture(screen, SCREEN_UV + vec2(float(x), float(y)) * px).rgb;
-    c /= 9.0;
+    float sum = 0.0;
+    for (int x = 0; x < 5; x++)
+        for (int y = 0; y < 5; y++) {
+            float ww = w[x] * w[y];
+            c += texture(screen, SCREEN_UV + vec2(float(x - 2), float(y - 2)) * ps).rgb * ww;
+            sum += ww;
+        }
+    c /= sum;
     c = mix(c, tint, tint_amt);
     float d = distance(SCREEN_UV, vec2(0.5));
-    c *= 1.0 - vignette * smoothstep(0.25, 0.85, d);
+    c *= 1.0 - vignette * smoothstep(0.25, 0.9, d);
     COLOR = vec4(c, 1.0);
 }
 ";
