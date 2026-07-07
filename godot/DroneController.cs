@@ -359,6 +359,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     public float BestLapAt(int i) => LapRecorder.BestLapFor(LevelStore.IdAt(i));
     public float[] TopLapsAt(int i) => LapRecorder.TopLapsFor(LevelStore.IdAt(i));
     public bool IsBuiltInLevel(int i) => LevelStore.IsBuiltIn(i);
+    public Level PreviewLevel(int i) => LevelStore.Load(LevelStore.IdAt(i));   // for the map preview
 
     // Main-menu Create: make a fresh user level (starter loop) and drop into the builder on it.
     public void CreateLevel()

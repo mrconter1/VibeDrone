@@ -8,6 +8,7 @@ public partial class LevelSelect : MenuScreen
     private VBoxContainer _rows = null!;
     private Label _detName = null!, _detBest = null!, _detList = null!;
     private Button _watch = null!, _delete = null!, _firstRow = null!;
+    private MapPreview _preview = null!;
     private int _focused;
 
     protected override void OnShow() { Rebuild(); _firstRow?.CallDeferred(Control.MethodName.GrabFocus); }
@@ -34,6 +35,8 @@ public partial class LevelSelect : MenuScreen
         det.AddChild(_detName);
         _detBest = UiTheme.Body("", UiTheme.Good, 20);
         det.AddChild(_detBest);
+        _preview = new MapPreview { CustomMinimumSize = new Vector2(300, 170) };
+        det.AddChild(_preview);
         det.AddChild(new HSeparator());
         det.AddChild(UiTheme.Body("TOP LAPS", UiTheme.TextDim, 14));
         _detList = UiTheme.Body("", UiTheme.Text, 18);
@@ -81,6 +84,7 @@ public partial class LevelSelect : MenuScreen
     {
         _focused = i;
         _delete.Visible = !Ctrl.IsBuiltInLevel(i);   // built-ins can't be deleted
+        _preview.SetLevel(Ctrl.PreviewLevel(i));     // top-down map schematic
         _detName.Text = Ctrl.LevelNameAt(i);
         float best = Ctrl.BestLapAt(i);
         _detBest.Text = best > 0f ? $"BEST  {FmtTime(best)}" : "no times yet";
