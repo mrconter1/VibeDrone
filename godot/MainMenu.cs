@@ -52,23 +52,42 @@ public partial class MainMenu : MenuScreen
         _buttons.AddThemeConstantOverride("separation", 10);
         v.AddChild(_buttons);
 
-        _first = MainItem("Start", () => Ctrl.StartGame());
+        // Inset the labels so the text column (as wide as the longest label) is centered inside the
+        // wide pill; the labels stay left-aligned to a common edge, and that column sits at screen centre.
+        string[] labels = { "Start", "Levels", "Create", "Settings", "Exit" };
+        float widest = 0f;
+        foreach (string s in labels)
+            widest = Mathf.Max(widest, UiTheme.BodyFont.GetStringSize(s, HorizontalAlignment.Left, -1, 21).X);
+        float pad = Mathf.Max(12f, (MenuWidth - widest) * 0.5f);
+
+        _first = MainItem("Start", () => Ctrl.StartGame(), pad);
         _buttons.AddChild(_first);
-        _buttons.AddChild(MainItem("Levels", () => Ctrl.OpenLevels(fromPause: false)));
-        _buttons.AddChild(MainItem("Create", () => Ctrl.CreateLevel()));
-        _buttons.AddChild(MainItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
-        _buttons.AddChild(MainItem("Exit", OpenConfirm));
+        _buttons.AddChild(MainItem("Levels", () => Ctrl.OpenLevels(fromPause: false), pad));
+        _buttons.AddChild(MainItem("Create", () => Ctrl.CreateLevel(), pad));
+        _buttons.AddChild(MainItem("Settings", () => Ctrl.OpenSettings(fromPause: false), pad));
+        _buttons.AddChild(MainItem("Exit", OpenConfirm, pad));
 
         BuildConfirm();
     }
 
-    // A title-menu item: fixed width so the column's left edges line up, but centered on screen
-    // (ShrinkCenter) rather than stretched full width, so the left-aligned text sits near centre.
-    private Button MainItem(string text, System.Action onPressed)
+    private const float MenuWidth = 440f;
+
+    // A title-menu item: a wide pill centered on screen (ShrinkCenter), with the label left-aligned
+    // but inset by `pad` on both sides so the (left-aligned) text column is centered within the pill.
+    private Button MainItem(string text, System.Action onPressed, float pad)
     {
-        Button b = UiTheme.MenuItem(text, onPressed, 440f);
+        Button b = UiTheme.MenuItem(text, onPressed, MenuWidth);
         b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
-        b.Alignment = HorizontalAlignment.Center;   // text centered on screen within the centered button
+        b.Alignment = HorizontalAlignment.Left;
+        foreach (string state in new[] { "normal", "hover", "pressed", "focus", "disabled" })
+        {
+            var sb = (StyleBox)UiTheme.Get().GetStylebox(state, "Button").Duplicate();
+            sb.ContentMarginLeft = pad;
+            sb.ContentMarginRight = pad;
+            sb.ContentMarginTop = 10;
+            sb.ContentMarginBottom = 10;
+            b.AddThemeStyleboxOverride(state, sb);
+        }
         return b;
     }
 
