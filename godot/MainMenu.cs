@@ -11,9 +11,17 @@ public partial class MainMenu : MenuScreen
     protected override bool WantsBack(InputEvent ev) => false;   // root screen: Space activates buttons
     protected override void Back() { }
 
+    // L opens the logo browser; R hot-reloads (under StartDebug) back to the title screen.
+    public override void _Input(InputEvent ev)
+    {
+        if (!Visible || ev is not InputEventKey { Pressed: true } k) return;
+        if (k.Keycode == Key.L) { Ctrl.OpenLogos(); GetViewport().SetInputAsHandled(); }
+        else if (k.Keycode == Key.R) { Ctrl.RequestMainReload(); GetViewport().SetInputAsHandled(); }
+    }
+
     protected override void Build()
     {
-        VBoxContainer v = CenteredBox(out _);
+        VBoxContainer v = CenteredBox(out Control root);
 
         v.AddChild(UiTheme.Title("OPENDRONE", 76));
         v.AddChild(UiTheme.Body("FPV TIME TRIAL", UiTheme.TextDim, 18));
@@ -25,5 +33,10 @@ public partial class MainMenu : MenuScreen
         v.AddChild(UiTheme.MenuItem("Create", () => Ctrl.CreateLevel()));
         v.AddChild(UiTheme.MenuItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
         v.AddChild(UiTheme.MenuItem("Exit", () => GetTree().Quit()));
+
+        var hint = UiTheme.Body("L  logos", UiTheme.TextDim, 15);
+        hint.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+        hint.Position = new Vector2(28, -40);
+        root.AddChild(hint);
     }
 }

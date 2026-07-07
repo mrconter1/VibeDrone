@@ -62,6 +62,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private SettingsMenu _settings = null!;
     private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
+    private LogoMenu _logoMenu = null!;
 
     public override void _Ready()
     {
@@ -71,6 +72,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         Config.Load();                                       // UI scale + blur + AA preferences
         LegacyMigration.Run();                               // old index-keyed records -> stable-id files
         _devSupervised = OS.GetEnvironment("OPENDRONE_DEV") == "1";   // StartDebug sets this
+        if (_devSupervised) _showDebug = true;                        // debug on by default under StartDebug
         GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
 
         _sessionLog = new SessionLog();
@@ -128,6 +130,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _pause = new PauseMenu();
         _pause.Setup(this);
         AddChild(_pause);
+        _logoMenu = new LogoMenu();
+        AddChild(_logoMenu);   // L on the title screen opens the logo browser
 
         _coord = new ScreenCoordinator(this, GetTree(), GetViewport(), _cam,
             _mainMenu, _levelSelect, _settings, _pause, _help, _backdrop, _menuCam);
@@ -140,12 +144,12 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         // A dev rebuild+relaunch (debug R) drops straight back into the level it was on; otherwise
         // load the first level behind the title screen.
         string devLevel = ConsumeDevRelaunch();
-        if (devLevel.Length > 0)
+        if (devLevel.Length > 0 && devLevel != "MAIN")   // reload into a level
         {
             SetLevelIndex(LevelStore.IndexOf(devLevel));
             _coord.ResumeGame();
         }
-        else
+        else                                             // fresh boot, or reload to the title screen
         {
             SetLevelIndex(0);
             _coord.OpenMain();
@@ -168,7 +172,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
         {
-            if (_showDebug && _devSupervised) RequestDevReload();   // hot-reload under StartDebug
+            if (_showDebug && _devSupervised) RequestDevReload(LevelStore.IdAt(_levelIndex));   // hot-reload this level
             else { _sessionLog.Mark("race start"); StartRace(); }
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.H })
@@ -383,6 +387,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // --- menu navigation: thin delegators to the ScreenCoordinator (called by the menu screens) ---
     public void StartGame() => _coord.StartGame();
     public void OpenMain() => _coord.OpenMain();
+    public void OpenLogos() => _logoMenu.Toggle();   // main-menu L
     public void ResumeGame() => _coord.ResumeGame();
     public void OpenPause() => _coord.OpenPause();
     public void OpenHelp() => _coord.OpenHelp();
@@ -413,13 +418,16 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     private const string DevRelaunchPath = "user://dev_relaunch.txt";
 
-    // Debug R (only under the StartDebug supervisor): save the level and quit. The supervisor sees
-    // the marker, rebuilds the latest code, and relaunches Godot, which resumes this level.
-    private void RequestDevReload()
+    // Main-menu R (under the supervisor): hot-reload and come back on the title screen.
+    public void RequestMainReload() { if (_showDebug && _devSupervised) RequestDevReload("MAIN"); }
+
+    // Debug R (only under the StartDebug supervisor): save the reload target and quit. The supervisor
+    // rebuilds the latest code and relaunches Godot; on boot "MAIN" opens the title screen, a level id
+    // resumes that level.
+    private void RequestDevReload(string target)
     {
-        string id = LevelStore.IdAt(_levelIndex);
-        Persistence.WriteText(DevRelaunchPath, id);
-        GD.Print($"[dev] reload requested for '{id}' - quitting for the supervisor to rebuild");
+        Persistence.WriteText(DevRelaunchPath, target);
+        GD.Print($"[dev] reload requested (target='{target}') - quitting for the supervisor to rebuild");
         GetTree().Quit();
     }
 
