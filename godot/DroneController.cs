@@ -57,6 +57,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
     private LogoMenu _logoMenu = null!;
+    private SoundMenu _sound = null!;
 
     public override void _Ready()
     {
@@ -68,11 +69,20 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _devSupervised = OS.GetEnvironment("OPENDRONE_DEV") == "1";   // StartDebug sets this
         if (_devSupervised) _showDebug = true;                        // debug on by default under StartDebug
         GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
+        DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
 
         _sessionLog = new SessionLog();
         AddChild(_sessionLog);
 
-        DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+        BuildWorld();
+        BuildOverlays();
+        BuildMenus();
+        BootIntoLevelOrMenu();
+    }
+
+    // The world + the drone body and its nose-mounted FPV camera.
+    private void BuildWorld()
+    {
         _arena = new Arena();
         _arena.GatesChanged += WireGates;   // re-wire pass-through triggers whenever gates rebuild
         AddChild(_arena);   // builds the world; a level is loaded below
@@ -84,7 +94,11 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _drone.AddChild(_cam);
         _cam.Position = new Vector3(0f, CameraUp, CameraForward);   // nose mount (drone local frame)
         _cam.RotationDegrees = new Vector3(CameraTiltDeg, 180f, 0f);
+    }
 
+    // HUD, audio, the ghost/lap recorder + its HUD presenter, and the replay theatre.
+    private void BuildOverlays()
+    {
         var layer = new CanvasLayer();
         AddChild(layer);
         _osd = new Hud();
@@ -93,9 +107,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _audio = new MotorAudio();
         AddChild(_audio);
 
-        var sound = new SoundMenu();
-        sound.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
-        AddChild(sound);       // M opens/closes the dev sound test
+        _sound = new SoundMenu();
+        _sound.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
+        AddChild(_sound);       // M opens/closes the dev sound test
 
         _recorder = new LapRecorder();
         AddChild(_recorder);   // owns the ghost + trail + best-lap board, loads on _Ready
@@ -105,7 +119,11 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _playback = new PlaybackController();
         _playback.Setup(_recorder, _cam);
         AddChild(_playback);
+    }
 
+    // The full-screen menu system (orbit camera, blur backdrop, screens + coordinator) and the editor.
+    private void BuildMenus()
+    {
         _menuCam = new MenuCamera();
         AddChild(_menuCam);    // orbits the arena behind the full-screen menus
         _backdrop = new MenuBackdrop();
@@ -118,7 +136,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _levelSelect.Setup(this);
         AddChild(_levelSelect);
         _settings = new SettingsMenu();
-        _settings.Setup(this, _audio, sound);
+        _settings.Setup(this, _audio, _sound);
         AddChild(_settings);
         _help = new HelpOverlay();
         _help.Setup(this);
@@ -136,9 +154,12 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _edit = new EditController();
         _edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(_edit);
+    }
 
-        // A dev rebuild+relaunch (debug R) drops straight back into the level it was on; otherwise
-        // load the first level behind the title screen.
+    // A dev rebuild+relaunch (debug R) drops straight back into the level it was on; otherwise
+    // load the first level behind the title screen.
+    private void BootIntoLevelOrMenu()
+    {
         string devLevel = DevReload.Consume();
         if (devLevel.Length > 0 && devLevel != "MAIN")   // reload into a level
         {
