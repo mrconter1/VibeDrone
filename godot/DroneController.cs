@@ -43,6 +43,12 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
     private bool _devSupervised;   // launched under StartDebug -> debug R hot-reloads
 
+    // game mode: Race (timed, resets on crash/miss) vs Free Fly (no clock, no resets)
+    private enum GameMode { Race, FreeFly }
+    private GameMode _mode = GameMode.Race;
+    private float _idleTime;       // seconds since meaningful pilot input (race auto-reset)
+    private float _prevThrottle;   // to detect throttle changes as "input"
+
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
     private EditController _edit = null!;
@@ -92,7 +98,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _cam = new Camera3D { Fov = CameraFovDeg };
         _drone.AddChild(_cam);
         _cam.Position = new Vector3(0f, CameraUp, CameraForward);   // nose mount (drone local frame)
-        _cam.RotationDegrees = new Vector3(CameraTiltDeg, 180f, 0f);
+        _cam.RotationDegrees = new Vector3(Config.CameraTilt, 180f, 0f);   // uptilt (Settings > Drone)
     }
 
     // HUD, audio, the ghost/lap recorder + its HUD presenter, and the replay theatre.
@@ -206,11 +212,33 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     public override void _PhysicsProcess(double delta)
     {
         Sticks s = _input.Sample(delta);
+        if (_mode == GameMode.FreeFly)                    // free fly: just fly, no clock/resets
+        {
+            StepFlight(delta, s);
+            DriveAudio(s);
+            ApplyHud("FREE");
+            return;
+        }
         if (_race.Armed && !TryStart(delta, s)) return;   // holding at the start line
         StepFlight(delta, s);
         if (CheckRaceEvents(delta)) return;               // restarted this tick
+        if (AutoResetIdle(delta, s)) return;              // reset after a spell of no input
         DriveAudio(s);
         ApplyHud("LIVE");
+    }
+
+    // In a running race, if auto-reset is on and the pilot gives no input for the configured time
+    // (e.g. after a crash), respawn at the start line. Returns true if it reset this tick.
+    private bool AutoResetIdle(double delta, Sticks s)
+    {
+        if (!Config.AutoReset || !_race.Running) { _idleTime = 0f; _prevThrottle = s.Throttle; return false; }
+        bool active = Mathf.Abs(s.Roll) > 0.06f || Mathf.Abs(s.Pitch) > 0.06f || Mathf.Abs(s.Yaw) > 0.06f
+                   || Mathf.Abs(s.Throttle - _prevThrottle) > 0.02f;
+        _prevThrottle = s.Throttle;
+        if (active) { _idleTime = 0f; return false; }
+        _idleTime += (float)delta;
+        if (_idleTime >= Config.AutoResetSeconds) { StartRace(); return true; }
+        return false;
     }
 
     // Armed at the start line: hold fixed and idle until the pilot gives input, then the clock
@@ -403,11 +431,32 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private void StartRace()
     {
         ResetDrone();          // spawn fixed in the start/finish gate
-        _race.Arm();           // clock starts on first input
-        _armSettle = 0f;
+        _idleTime = 0f;
         _gateHit = false;
         _recorder.HideGhost();
+        if (_mode == GameMode.FreeFly) return;   // free fly: fly immediately, no clock/ghost
+        _race.Arm();           // clock starts on first input
+        _armSettle = 0f;
         _recorder.BeginLap();
+    }
+
+    // --- game mode (Race / Free Fly), switched from the pause menu ---
+    public string GameModeName => _mode == GameMode.FreeFly ? "Free Fly" : "Race";
+
+    public void CycleGameMode(int dir)
+    {
+        _mode = _mode == GameMode.Race ? GameMode.FreeFly : GameMode.Race;   // two modes: toggle
+        StartRace();   // respawn for the new mode (armed for Race, free for Free Fly)
+    }
+
+    // --- drone FPV camera uptilt (Settings > Drone) ---
+    public float CameraTilt => Config.CameraTilt;
+
+    public void ApplyCameraTilt(float deg)
+    {
+        Config.CameraTilt = Mathf.Clamp(deg, 0f, 60f);
+        _cam.RotationDegrees = new Vector3(Config.CameraTilt, 180f, 0f);
+        Config.Save();
     }
 
     // True if the drone flew forward THROUGH the next expected gate's plane but outside its

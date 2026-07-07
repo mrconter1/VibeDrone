@@ -38,6 +38,7 @@ public sealed class HudPresenter
         _osd.Sound = _audio.CurrentName;
         _osd.ShowDebug = showDebug;
         _osd.DevReload = devReload;
+        _osd.FreeFly = mode == "FREE";
         int regular = _arena.GateTriggers.Count - 1;
         _osd.LapTime = _race.LapTime;
         _osd.LastLap = _recorder.LastLap;

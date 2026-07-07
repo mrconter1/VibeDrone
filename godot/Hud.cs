@@ -7,7 +7,7 @@ public partial class Hud : Control
 {
     public float Speed, Alt, Throttle, RollDeg, PitchDeg, TimeSec, Fov, Fps;
     public string Mode = "LIVE", Sound = "OFF";
-    public bool ShowDebug, DevReload;
+    public bool ShowDebug, DevReload, FreeFly;
 
     public float LapTime, LastLap, BestLap;
     public string RaceStatus = "", Ranks = "", LevelName = "";
@@ -47,20 +47,27 @@ public partial class Hud : Control
 
         if (_font == null) return;
 
-        // lap clock (top centre)
-        DrawRect(new Rect2(cx - 130, 14, 260, 62), new Color(0f, 0f, 0f, 0.45f));
-        DrawString(_font, new Vector2(cx - 130, 60), Format.Time(LapTime, blankZero: false), HorizontalAlignment.Center, 260, 46, Colors.White);
-        if (RaceStatus.Length > 0)
-            DrawString(_font, new Vector2(cx - 130, 74), RaceStatus, HorizontalAlignment.Center, 260, 14, dim);
-        if (LastLap > 0f)
-            DrawString(_font, new Vector2(cx - 132, 98), $"LAST {Format.Time(LastLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, dim);
-        if (BestLap > 0f)
-            DrawString(_font, new Vector2(cx, 98), $"BEST {Format.Time(BestLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, gold);
+        // free fly: no clock, just a label; otherwise the lap clock (top centre)
+        if (FreeFly)
+        {
+            DrawString(_font, new Vector2(cx - 130, 52), "FREE FLY", HorizontalAlignment.Center, 260, 26, new Color(0.24f, 0.80f, 0.96f));
+        }
+        else
+        {
+            DrawRect(new Rect2(cx - 130, 14, 260, 62), new Color(0f, 0f, 0f, 0.45f));
+            DrawString(_font, new Vector2(cx - 130, 60), Format.Time(LapTime, blankZero: false), HorizontalAlignment.Center, 260, 46, Colors.White);
+            if (RaceStatus.Length > 0)
+                DrawString(_font, new Vector2(cx - 130, 74), RaceStatus, HorizontalAlignment.Center, 260, 14, dim);
+            if (LastLap > 0f)
+                DrawString(_font, new Vector2(cx - 132, 98), $"LAST {Format.Time(LastLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, dim);
+            if (BestLap > 0f)
+                DrawString(_font, new Vector2(cx, 98), $"BEST {Format.Time(BestLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, gold);
+        }
 
         // track name + best-laps board (top right)
         if (LevelName.Length > 0)
             DrawString(_font, new Vector2(sz.X - 196, 24), LevelName, HorizontalAlignment.Left, -1, 15, gold);
-        if (Ranks.Length > 0)
+        if (!FreeFly && Ranks.Length > 0)
         {
             DrawString(_font, new Vector2(sz.X - 196, 44), "BEST LAPS", HorizontalAlignment.Left, -1, 17, hud);
             DrawMultilineString(_font, new Vector2(sz.X - 196, 68), Ranks, HorizontalAlignment.Left, -1, 18, -1, Colors.White);

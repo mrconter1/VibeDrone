@@ -20,6 +20,13 @@ public static class Config
     public static bool Fxaa = false;             // post AA, smooths shader aliasing (checker flag)
     public static bool MenuSsaa = false;         // supersample the 3D while a menu is open (kills orbit shimmer)
 
+    // race mode - auto-reset when the pilot stops flying (Settings > Race Mode)
+    public static bool AutoReset = true;         // reset to the start line after a spell of no input
+    public static float AutoResetSeconds = 2.0f; // how long with no input before the reset fires
+
+    // drone - FPV camera uptilt in degrees (Settings > Drone)
+    public static float CameraTilt = 30f;
+
     public static void Load()
     {
         if (!Persistence.TryLoad(Path, out Variant v) || v.VariantType != Variant.Type.Dictionary) return;
@@ -33,6 +40,9 @@ public static class Config
         if (d.ContainsKey("msaa"))        Msaa = d["msaa"].AsInt32();
         if (d.ContainsKey("fxaa"))        Fxaa = d["fxaa"].AsBool();
         if (d.ContainsKey("menu_ssaa"))   MenuSsaa = d["menu_ssaa"].AsBool();
+        if (d.ContainsKey("auto_reset"))  AutoReset = d["auto_reset"].AsBool();
+        if (d.ContainsKey("auto_reset_s")) AutoResetSeconds = Mathf.Clamp(d["auto_reset_s"].AsSingle(), 0.5f, 10f);
+        if (d.ContainsKey("cam_tilt"))    CameraTilt = Mathf.Clamp(d["cam_tilt"].AsSingle(), 0f, 60f);
     }
 
     public static void Save() => Persistence.Save(Path, new Godot.Collections.Dictionary
@@ -41,6 +51,7 @@ public static class Config
         { "blur_type", BlurType }, { "blur_radius", BlurRadius }, { "blur_iters", BlurIterations },
         { "blur_tint", BlurTint }, { "blur_vig", BlurVignette },
         { "msaa", Msaa }, { "fxaa", Fxaa }, { "menu_ssaa", MenuSsaa },
+        { "auto_reset", AutoReset }, { "auto_reset_s", AutoResetSeconds }, { "cam_tilt", CameraTilt },
     });
 
     public const int MaxIterations = 5;   // backdrop builds this many H+V stages; some may be idle
