@@ -19,6 +19,12 @@ public partial class Arena : Node3D
     public IReadOnlyList<PropNode> Props => _props;
     public Transform3D StartTransform => _gates[0].GlobalTransform;   // gate 0 = start/finish
 
+    // Fired whenever the gates are rebuilt (load / add / remove) so the controller can re-wire the
+    // pass-through triggers.
+    public event System.Action? GatesChanged;
+
+    public int GateIndexOf(Node3D n) => _gates.IndexOf(n);
+
     public override void _Ready()
     {
         BuildWorld();   // world only; a Level is loaded next by the controller
@@ -42,10 +48,11 @@ public partial class Arena : Node3D
             _props.Add(node);
         }
         _groundMat.SetShaderParameter("base_color", lvl.Ground.Color);
+        GatesChanged?.Invoke();
     }
 
-    // Capture the current gate + prop transforms back into the Level and persist it (from edit mode).
-    public void SaveEdits()
+    // Capture the current gate + prop transforms into the Level (no file write).
+    private void CaptureToLevel()
     {
         if (_level == null) return;
         _level.Gates.Clear();
@@ -56,7 +63,28 @@ public partial class Arena : Node3D
         }
         _level.Props.Clear();
         foreach (PropNode p in _props) { p.CaptureTransform(); _level.Props.Add(p.Data); }
-        LevelStore.Save(_level);
+    }
+
+    // Capture the current edits into the Level and persist it (from edit mode).
+    public void SaveEdits()
+    {
+        CaptureToLevel();
+        if (_level != null) LevelStore.Save(_level);
+    }
+
+    // JSON snapshot of the current state (for the undo history).
+    public string SnapshotJson()
+    {
+        CaptureToLevel();
+        return _level.ToJson();
+    }
+
+    // Restore a snapshot: rebuild everything from it (re-wires triggers) and persist.
+    public void RestoreJson(string json)
+    {
+        Level lvl = Level.FromJson(json);
+        LoadLevel(lvl);
+        LevelStore.Save(lvl);
     }
 
     // Spawn a new prop at a position (edit mode); returns the node so the caller can select it.
@@ -69,10 +97,41 @@ public partial class Arena : Node3D
         return node;
     }
 
+    // Add a copy of an existing prop (for cloning); returns the new node.
+    public PropNode AddProp(Prop data)
+    {
+        PropNode node = PropTypes.Build(data.Clone());
+        AddChild(node);
+        _props.Add(node);
+        return node;
+    }
+
     public void RemoveProp(PropNode node)
     {
         _props.Remove(node);
         node.QueueFree();
+    }
+
+    // Append a new gate (becomes the last regular gate before the finish) and rebuild. Returns the
+    // new gate node. Rebuilding renumbers labels + re-wires triggers via GatesChanged.
+    public Node3D AddGate(Vector3 pos, Quaternion rot)
+    {
+        CaptureToLevel();
+        _level.Gates.Add(new Pose { Pos = pos, Rot = rot });
+        LoadLevel(_level);
+        SaveEdits();
+        return _gates[^1];
+    }
+
+    // Remove a gate by index (never gate 0, and keep at least 2). Returns true if removed.
+    public bool RemoveGate(int index)
+    {
+        CaptureToLevel();
+        if (index <= 0 || index >= _level.Gates.Count || _level.Gates.Count <= 2) return false;
+        _level.Gates.RemoveAt(index);
+        LoadLevel(_level);
+        SaveEdits();
+        return true;
     }
 
     private void BuildWorld()

@@ -12,6 +12,7 @@
     <Compile Include="..\godot\FlightModel.cs" />
     <Compile Include="..\godot\RaceLogic.cs" />
     <Compile Include="..\godot\RaceState.cs" />
+    <Compile Include="..\godot\EditHistory.cs" />
     <Compile Include="..\godot\LevelDto.cs" />
   </ItemGroup>
 

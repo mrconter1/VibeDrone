@@ -76,7 +76,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
         _arena = new Arena();
-        AddChild(_arena);   // builds gates + triggers + start marker synchronously
+        _arena.GatesChanged += WireGates;   // re-wire pass-through triggers whenever gates rebuild
+        AddChild(_arena);   // builds the world; a level is loaded below
 
         _drone = new CharacterBody3D();
         AddChild(_drone);
@@ -391,8 +392,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     {
         _levelIndex = LevelStore.Wrap(index);
         string id = LevelStore.IdAt(_levelIndex);
-        _arena.LoadLevel(LevelStore.Load(id));
-        WireGates();
+        _arena.LoadLevel(LevelStore.Load(id));   // fires GatesChanged -> WireGates
         _recorder.SetLevel(id);
         StartRace();
     }
