@@ -66,7 +66,7 @@ public partial class MainMenu : MenuScreen
     // (ShrinkCenter) rather than stretched full width, so the left-aligned text sits near centre.
     private Button MainItem(string text, System.Action onPressed)
     {
-        Button b = UiTheme.MenuItem(text, onPressed, 340f);
+        Button b = UiTheme.MenuItem(text, onPressed, 440f);
         b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
         return b;
     }
