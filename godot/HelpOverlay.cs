@@ -1,11 +1,10 @@
 using Godot;
 
-// A controls cheat-sheet. Opened from the pause menu (or the H key) and dismissed with any key.
-// Sits above the pause menu (Layer 12) and runs while paused (ProcessMode=Always).
+// Controls cheat-sheet, styled from UiTheme. Shown from the pause menu (or H); Esc/any key returns.
+// Driven by DroneController's screen coordinator.
 public partial class HelpOverlay : CanvasLayer
 {
-    private Panel _panel = null!;
-    private bool _open;
+    private DroneController _ctrl = null!;
 
     private static readonly (string, string)[] Bindings =
     {
@@ -15,68 +14,72 @@ public partial class HelpOverlay : CanvasLayer
         ("Yaw", "Q / C   (or pad)"),
         ("Restart race", "R"),
         ("Pause menu", "Esc"),
-        ("Sound menu", "M"),
-        ("Edit mode", "E   (free-fly; C grabs a gate, 1-6 rotate)"),
         ("This help", "H"),
+        ("Edit mode", "E   (free-fly; C grabs a gate, 1-6 rotate)"),
+        ("Sound test", "M"),
     };
 
-    public bool IsOpen => _open;
+    public void Setup(DroneController ctrl) => _ctrl = ctrl;
 
     public override void _Ready()
     {
         ProcessMode = ProcessModeEnum.Always;
         Layer = 12;
         BuildUi();
-        _panel.Visible = false;
+        Visible = false;
     }
 
-    public void SetOpen(bool open)
-    {
-        _open = open;
-        _panel.Visible = open;
-        GetTree().Paused = open;
-        Input.MouseMode = open ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
-    }
+    public void Show(bool on) => Visible = on;
 
-    // Any key closes it (caught here before the pause menu sees Esc).
+    // Any key returns (Esc handled here before other overlays).
     public override void _Input(InputEvent ev)
     {
-        if (_open && ev is InputEventKey { Pressed: true })
+        if (Visible && ev is InputEventKey { Pressed: true })
         {
-            SetOpen(false);
+            _ctrl.CloseHelp();
             GetViewport().SetInputAsHandled();
         }
     }
 
     private void BuildUi()
     {
-        Vector2I win = DisplayServer.WindowGetSize();
-        _panel = new Panel { Size = new Vector2(460, 360), Position = new Vector2(win.X / 2f - 230, win.Y / 2f - 180) };
-        _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.96f);
-        AddChild(_panel);
+        var root = new Control { Theme = UiTheme.Get() };
+        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.MouseFilter = Control.MouseFilterEnum.Ignore;
+        AddChild(root);
 
-        var v = new VBoxContainer { Position = new Vector2(28, 24), Size = new Vector2(404, 312) };
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(center);
+
+        var panel = UiTheme.Panel();
+        panel.CustomMinimumSize = new Vector2(520, 420);
+        center.AddChild(panel);
+
+        var pad = new MarginContainer();
+        pad.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        foreach (var m in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
+            pad.AddThemeConstantOverride(m, 32);
+        panel.AddChild(pad);
+
+        var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 10);
-        _panel.AddChild(v);
+        pad.AddChild(v);
 
-        var title = new Label { Text = "CONTROLS" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        v.AddChild(title);
+        v.AddChild(UiTheme.Title("CONTROLS", 34));
         v.AddChild(new HSeparator());
 
         foreach (var (action, keys) in Bindings)
         {
             var row = new HBoxContainer();
-            row.AddChild(new Label { Text = action, CustomMinimumSize = new Vector2(150, 0) });
-            var k = new Label { Text = keys };
-            k.AddThemeColorOverride("font_color", new Color(0.62f, 0.98f, 0.76f));
-            row.AddChild(k);
+            row.AddChild(UiTheme.Body(action, UiTheme.Text, 17));
+            var spacer = new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(24, 0) };
+            row.AddChild(spacer);
+            row.AddChild(UiTheme.Body(keys, UiTheme.Accent, 16));
             v.AddChild(row);
         }
 
         v.AddChild(new HSeparator());
-        var hint = new Label { Text = "press any key to close" };
-        hint.AddThemeColorOverride("font_color", new Color(1f, 1f, 1f, 0.5f));
-        v.AddChild(hint);
+        v.AddChild(UiTheme.Body("press any key to close", UiTheme.TextDim, 14));
     }
 }

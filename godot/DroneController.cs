@@ -55,8 +55,18 @@ public partial class DroneController : Node3D
 
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
+
+    // --- menu system ---
+    private enum Screen { None, Main, Levels, Settings, Pause, Help }
+    private Screen _screen = Screen.Main;
+    private Screen _return = Screen.Main;    // where Levels/Settings/Help back out to
+    private MenuCamera _menuCam = null!;
+    private MenuBackdrop _backdrop = null!;
+    private MainMenu _mainMenu = null!;
+    private LevelSelect _levelSelect = null!;
+    private SettingsMenu _settings = null!;
+    private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
-    private TrackMenu _trackMenu = null!;
 
     public override void _Ready()
     {
@@ -86,9 +96,9 @@ public partial class DroneController : Node3D
         _audio = new MotorAudio();
         AddChild(_audio);
 
-        var menu = new SoundMenu();
-        menu.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
-        AddChild(menu);       // M opens/closes it and pauses the game
+        var sound = new SoundMenu();
+        sound.Setup(_audio);   // set before AddChild: AddChild runs _Ready synchronously
+        AddChild(sound);       // M opens/closes the dev sound test
 
         _recorder = new LapRecorder();
         AddChild(_recorder);   // owns the ghost + trail + best-lap board, loads on _Ready
@@ -97,25 +107,34 @@ public partial class DroneController : Node3D
         _playback.Setup(_recorder, _cam);
         AddChild(_playback);
 
+        _menuCam = new MenuCamera();
+        AddChild(_menuCam);    // orbits the arena behind the full-screen menus
+        _backdrop = new MenuBackdrop();
+        AddChild(_backdrop);   // frosted blur behind those menus
+
+        _mainMenu = new MainMenu();
+        _mainMenu.Setup(this);
+        AddChild(_mainMenu);
+        _levelSelect = new LevelSelect();
+        _levelSelect.Setup(this);
+        AddChild(_levelSelect);
+        _settings = new SettingsMenu();
+        _settings.Setup(this, _audio, sound);
+        AddChild(_settings);
         _help = new HelpOverlay();
-        AddChild(_help);      // H opens it (or the pause-menu Controls button)
-
-        _trackMenu = new TrackMenu();
-        _trackMenu.Setup(this);
-        AddChild(_trackMenu);   // opened from the pause menu's "Select track"
-
-        var pause = new PauseMenu();
-        pause.Setup(this, menu, _help);
-        AddChild(pause);      // Esc opens it
+        _help.Setup(this);
+        AddChild(_help);
+        _pause = new PauseMenu();
+        _pause.Setup(this);
+        AddChild(_pause);
 
         var edit = new EditController();
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
         WireGates();
-
-        Input.MouseMode = Input.MouseModeEnum.Captured;   // cursor never shown during flight
-        StartRace();   // begin in fly mode, held fixed at the start line, engine off
+        StartRace();            // pre-build a race behind the menu (armed at the start line)
+        SetScreen(Screen.Main); // ...but open on the title screen
     }
 
     public override void _Input(InputEvent ev)
@@ -126,15 +145,20 @@ public partial class DroneController : Node3D
 
     public override void _UnhandledInput(InputEvent ev)
     {
-        // R restarts the race; Esc/M/E are handled by the pause/sound/edit controllers.
-        if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
+        // Only reached while playing (menus pause the tree + handle their own input).
+        // Esc opens the pause menu, R restarts, H shows the controls.
+        if (ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        {
+            OpenPause();
+        }
+        else if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
         {
             _sessionLog.Mark("race start");
             StartRace();
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.H })
         {
-            _help.SetOpen(!_help.IsOpen);
+            OpenHelp();
         }
     }
 
@@ -317,8 +341,53 @@ public partial class DroneController : Node3D
     public int TrackCount => TrackLibrary.Count;
     public string TrackNameAt(int i) => TrackLibrary.Name(i);
     public float BestLapAt(int i) => LapRecorder.BestLapFor(i);
-    public void OpenTrackMenu() => _trackMenu.SetOpen(true);       // from the pause menu
-    public void SelectTrack(int index) => SetTrack(index);         // from the track menu
+
+    // --- screen coordinator: one screen visible at a time, driving pause, camera and cursor ---
+    private void SetScreen(Screen s)
+    {
+        _screen = s;
+        _mainMenu.Show(s == Screen.Main);
+        _levelSelect.Show(s == Screen.Levels);
+        _settings.Show(s == Screen.Settings);
+        _pause.Show(s == Screen.Pause);
+        _help.Show(s == Screen.Help);
+
+        bool fullScreenMenu = s is Screen.Main or Screen.Levels or Screen.Settings;
+        _backdrop.SetActive(fullScreenMenu);
+        _menuCam.Active = fullScreenMenu;
+        if (fullScreenMenu) _menuCam.MakeCurrent();
+        else if (s == Screen.None) _cam.MakeCurrent();   // Pause/Help keep the (frozen) drone view
+
+        GetTree().Paused = s != Screen.None;
+        Input.MouseMode = s == Screen.None ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+    }
+
+    // navigation entry points used by the menus
+    public void StartGame() => PlayTrack(0);                 // main-menu Start -> first track
+    public void OpenMain() => SetScreen(Screen.Main);
+    public void ResumeGame() => SetScreen(Screen.None);
+    public void OpenPause() => SetScreen(Screen.Pause);
+    public void OpenHelp() { _return = _screen; SetScreen(Screen.Help); }
+    public void CloseHelp() => SetScreen(_return == Screen.Help ? Screen.Pause : _return);
+    public void OpenLevels(bool fromPause) { _return = fromPause ? Screen.Pause : Screen.Main; SetScreen(Screen.Levels); }
+    public void OpenSettings(bool fromPause) { _return = fromPause ? Screen.Pause : Screen.Main; SetScreen(Screen.Settings); }
+    public void MenuBack() => SetScreen(_return);
+    public void RestartRace() { StartRace(); SetScreen(Screen.None); }
+
+    // Load a track and drop into flying it.
+    public void PlayTrack(int index)
+    {
+        SetTrack(index);
+        SetScreen(Screen.None);
+    }
+
+    // Load a track and watch its best-lap replay (chase cam). Playback manages its own cam + pause.
+    public void WatchBest(int index)
+    {
+        SetTrack(index);
+        SetScreen(Screen.None);
+        _playback.Start();
+    }
 
     // Rebuild the arena for another track, re-wire its gates, load that track's records, restart.
     private void SetTrack(int index)
@@ -386,8 +455,13 @@ public partial class DroneController : Node3D
 
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
-    public void StartPlayback() => _playback.Start();
-    public void ClearResults() => _recorder.Clear();   // Esc menu: wipe saved laps + ghost
+
+    // Wipe one track's saved records (from the Levels screen); reload if it's the active track.
+    public void ClearRecords(int index)
+    {
+        LapRecorder.ClearTrack(index);
+        if (index == _arena.TrackIndex) _recorder.SetTrack(index);
+    }
 
 
     private void ApplyHud(string mode)

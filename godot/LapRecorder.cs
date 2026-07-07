@@ -153,15 +153,27 @@ public partial class LapRecorder : Node3D
     // Best saved lap for any track (0 if none yet), without switching to it - for the track menu.
     public static float BestLapFor(int track)
     {
+        float[] laps = TopLapsFor(track);
+        return laps.Length > 0 ? laps[0] : 0f;
+    }
+
+    // Sorted saved lap times for any track (fastest first), without switching to it.
+    public static float[] TopLapsFor(int track)
+    {
         if (!Persistence.TryLoad($"user://laptimes_{track}.json", out Variant parsed)
-            || parsed.VariantType != Variant.Type.Array) return 0f;
-        float best = 0f;
-        foreach (Variant v in parsed.AsGodotArray())
-        {
-            float t = v.AsSingle();
-            if (best == 0f || t < best) best = t;
-        }
-        return best;
+            || parsed.VariantType != Variant.Type.Array) return System.Array.Empty<float>();
+        var arr = parsed.AsGodotArray();
+        var laps = new float[arr.Count];
+        for (int i = 0; i < arr.Count; i++) laps[i] = arr[i].AsSingle();
+        System.Array.Sort(laps);
+        return laps;
+    }
+
+    // Wipe a track's saved records (empty lap list + empty ghost), without switching to it.
+    public static void ClearTrack(int track)
+    {
+        Persistence.Save($"user://laptimes_{track}.json", new Godot.Collections.Array());
+        Persistence.Save($"user://ghost_{track}.json", new Godot.Collections.Array());
     }
 
     // Switch to another track's records: drop the in-memory ghost/laps and reload that track's.

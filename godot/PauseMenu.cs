@@ -1,91 +1,73 @@
 using Godot;
 
-// Esc pause menu: Resume, toggle Debug overlay, open Sound settings, or Exit.
-// Pauses the game and shows the cursor while open. ProcessMode=Always (runs paused).
+// In-game pause menu, styled from UiTheme and driven by DroneController's screen coordinator.
+// Esc resumes. Navigation (Levels/Settings/Controls/Main menu) routes back through the controller.
 public partial class PauseMenu : CanvasLayer
 {
     private DroneController _ctrl = null!;
-    private SoundMenu _sound = null!;
-    private HelpOverlay _help = null!;
-    private Panel _panel = null!;
-    private Button _debugBtn = null!;
-    private bool _open;
+    private Button _first = null!;
 
-    private static readonly Color Accent = new(0.62f, 0.98f, 0.76f);   // shared HUD/menu green
-
-    public void Setup(DroneController ctrl, SoundMenu sound, HelpOverlay help) { _ctrl = ctrl; _sound = sound; _help = help; }
+    public void Setup(DroneController ctrl) => _ctrl = ctrl;
 
     public override void _Ready()
     {
         ProcessMode = ProcessModeEnum.Always;
         Layer = 11;
         BuildUi();
-        _panel.Visible = false;
+        Visible = false;
     }
 
-    public override void _UnhandledInput(InputEvent ev)
+    public void Show(bool on)
     {
-        if (ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        Visible = on;
+        if (on) _first.CallDeferred(Control.MethodName.GrabFocus);
+    }
+
+    public override void _Input(InputEvent ev)
+    {
+        if (Visible && ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
-            SetOpen(!_open);
+            _ctrl.ResumeGame();
             GetViewport().SetInputAsHandled();
         }
     }
 
-    private void SetOpen(bool open)
-    {
-        _open = open;
-        _panel.Visible = _open;
-        GetTree().Paused = _open;
-        Input.MouseMode = _open ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
-    }
-
     private void BuildUi()
     {
-        Vector2I win = DisplayServer.WindowGetSize();
-        _panel = new Panel { Size = new Vector2(300, 542), Position = new Vector2(win.X / 2f - 150, win.Y / 2f - 271) };
-        _panel.SelfModulate = new Color(0.05f, 0.06f, 0.09f, 0.94f);
-        AddChild(_panel);
+        var root = new Control { Theme = UiTheme.Get() };
+        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.MouseFilter = Control.MouseFilterEnum.Ignore;
+        AddChild(root);
 
-        var v = new VBoxContainer { Position = new Vector2(24, 24), Size = new Vector2(252, 494) };
-        v.AddThemeConstantOverride("separation", 14);
-        _panel.AddChild(v);
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(center);
 
-        var title = new Label { Text = "PAUSED" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        title.AddThemeColorOverride("font_color", Accent);
-        v.AddChild(title);
+        var panel = UiTheme.Panel();
+        panel.CustomMinimumSize = new Vector2(360, 470);
+        center.AddChild(panel);
+
+        var pad = new MarginContainer();
+        pad.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        foreach (var m in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
+            pad.AddThemeConstantOverride(m, 28);
+        panel.AddChild(pad);
+
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 8);
+        pad.AddChild(v);
+
+        v.AddChild(UiTheme.Title("PAUSED", 34));
         v.AddChild(new HSeparator());
 
-        AddButton(v, "Resume", () => SetOpen(false));
-
-        AddButton(v, "Select track", () => { SetOpen(false); _ctrl.OpenTrackMenu(); });
-
-        _debugBtn = AddButton(v, DebugLabel(), () =>
-        {
-            _ctrl.SetShowDebug(!_ctrl.ShowDebug);
-            _debugBtn.Text = DebugLabel();
-        });
-
-        AddButton(v, "Playback best lap", () => { SetOpen(false); _ctrl.StartPlayback(); });
-
-        AddButton(v, "Sound settings", () => { SetOpen(false); _sound.SetOpen(true); });
-
-        AddButton(v, "Controls", () => { SetOpen(false); _help.SetOpen(true); });
-
-        Button clearBtn = null!;
-        clearBtn = AddButton(v, "Clear results", () => { _ctrl.ClearResults(); clearBtn.Text = "Cleared!"; });
-
-        AddButton(v, "Exit game", () => GetTree().Quit());
-    }
-
-    private string DebugLabel() => "Debug overlay: " + (_ctrl.ShowDebug ? "ON" : "OFF");
-
-    private static Button AddButton(Control parent, string text, System.Action onPressed)
-    {
-        var b = new Button { Text = text, CustomMinimumSize = new Vector2(252, 40) };
-        b.Pressed += onPressed;
-        parent.AddChild(b);
-        return b;
+        _first = UiTheme.MenuItem("Resume", () => _ctrl.ResumeGame(), 300f);
+        v.AddChild(_first);
+        v.AddChild(UiTheme.MenuItem("Restart lap", () => _ctrl.RestartRace(), 300f));
+        v.AddChild(UiTheme.MenuItem("Levels", () => _ctrl.OpenLevels(fromPause: true), 300f));
+        v.AddChild(UiTheme.MenuItem("Watch best lap", () => _ctrl.WatchBest(_ctrl.TrackIndex), 300f));
+        v.AddChild(UiTheme.MenuItem("Settings", () => _ctrl.OpenSettings(fromPause: true), 300f));
+        v.AddChild(UiTheme.MenuItem("Controls", () => _ctrl.OpenHelp(), 300f));
+        v.AddChild(UiTheme.MenuItem("Main menu", () => _ctrl.OpenMain(), 300f));
+        v.AddChild(UiTheme.MenuItem("Exit game", () => GetTree().Quit(), 300f));
     }
 }
