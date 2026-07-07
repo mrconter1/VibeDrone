@@ -13,10 +13,13 @@ public static class PropTypes
         return Types[(i + 1) % Types.Length];
     }
 
+    // One shared mesh resource per type (props scale via their node, so the mesh stays unit-sized).
+    private static Mesh _rock = null!;
+
     public static Mesh Mesh(string type) => type switch
     {
-        "rock" => Rock(),
-        _ => Rock(),
+        "rock" => _rock ??= Rock(),
+        _ => _rock ??= Rock(),
     };
 
     public static PropNode Build(Prop data)

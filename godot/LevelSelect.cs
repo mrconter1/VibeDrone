@@ -102,29 +102,29 @@ public partial class LevelSelect : CanvasLayer
         foreach (Node c in _rows.GetChildren()) c.QueueFree();
         _firstRow = null!;
 
-        for (int i = 0; i < _ctrl.TrackCount; i++)
+        for (int i = 0; i < _ctrl.LevelCount; i++)
         {
             int idx = i;
-            bool current = i == _ctrl.TrackIndex;
+            bool current = i == _ctrl.LevelIndex;
             var row = new Button
             {
                 Alignment = HorizontalAlignment.Left,
                 CustomMinimumSize = new Vector2(360, 46),
                 FocusMode = Control.FocusModeEnum.All,
-                Text = (current ? "▸ " : "   ") + _ctrl.TrackNameAt(i).PadRight(16) + FmtTime(_ctrl.BestLapAt(i)),
+                Text = (current ? "▸ " : "   ") + _ctrl.LevelNameAt(i).PadRight(16) + FmtTime(_ctrl.BestLapAt(i)),
             };
-            row.Pressed += () => _ctrl.PlayTrack(idx);
+            row.Pressed += () => _ctrl.PlayLevel(idx);
             row.FocusEntered += () => SetDetails(idx);
             _rows.AddChild(row);
-            if (i == _ctrl.TrackIndex || _firstRow == null) _firstRow = row;
+            if (i == _ctrl.LevelIndex || _firstRow == null) _firstRow = row;
         }
-        SetDetails(_ctrl.TrackIndex);
+        SetDetails(_ctrl.LevelIndex);
     }
 
     private void SetDetails(int i)
     {
         _focused = i;
-        _detName.Text = _ctrl.TrackNameAt(i);
+        _detName.Text = _ctrl.LevelNameAt(i);
         float best = _ctrl.BestLapAt(i);
         _detBest.Text = best > 0f ? $"BEST  {FmtTime(best)}" : "no times yet";
 

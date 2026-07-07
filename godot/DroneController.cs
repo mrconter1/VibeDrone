@@ -137,7 +137,7 @@ public partial class DroneController : Node3D
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(edit);
 
-        SetTrack(0);            // load the first level (gates + props), pre-build a race behind the menu
+        SetLevelIndex(0);            // load the first level (gates + props), pre-build a race behind the menu
         SetScreen(Screen.Main); // ...but open on the title screen
     }
 
@@ -341,10 +341,10 @@ public partial class DroneController : Node3D
     }
 
     private int _levelIndex;
-    public string TrackName => _arena.TrackName;
-    public int TrackIndex => _levelIndex;
-    public int TrackCount => LevelStore.Count;
-    public string TrackNameAt(int i) => LevelStore.NameAt(i);
+    public string LevelName => _arena.LevelName;
+    public int LevelIndex => _levelIndex;
+    public int LevelCount => LevelStore.Count;
+    public string LevelNameAt(int i) => LevelStore.NameAt(i);
     public float BestLapAt(int i) => LapRecorder.BestLapFor(LevelStore.IdAt(i));
     public float[] TopLapsAt(int i) => LapRecorder.TopLapsFor(LevelStore.IdAt(i));
 
@@ -370,7 +370,7 @@ public partial class DroneController : Node3D
     }
 
     // navigation entry points used by the menus
-    public void StartGame() => PlayTrack(0);                 // main-menu Start -> first track
+    public void StartGame() => PlayLevel(0);                 // main-menu Start -> first track
     public void OpenMain() => SetScreen(Screen.Main);
     public void ResumeGame() => SetScreen(Screen.None);
     public void OpenPause() => SetScreen(Screen.Pause);
@@ -382,22 +382,22 @@ public partial class DroneController : Node3D
     public void RestartRace() { StartRace(); SetScreen(Screen.None); }
 
     // Load a track and drop into flying it.
-    public void PlayTrack(int index)
+    public void PlayLevel(int index)
     {
-        SetTrack(index);
+        SetLevelIndex(index);
         SetScreen(Screen.None);
     }
 
     // Load a track and watch its best-lap replay (chase cam). Playback manages its own cam + pause.
     public void WatchBest(int index)
     {
-        SetTrack(index);
+        SetLevelIndex(index);
         SetScreen(Screen.None);
         _playback.Start();
     }
 
     // Load a level (by catalogue index), re-wire its gates, load that level's records, restart.
-    private void SetTrack(int index)
+    private void SetLevelIndex(int index)
     {
         _levelIndex = LevelStore.Wrap(index);
         string id = LevelStore.IdAt(_levelIndex);
@@ -526,7 +526,7 @@ public partial class DroneController : Node3D
         _osd.LastLap = _recorder.LastLap;
         _osd.BestLap = _recorder.BestLap;
         _osd.Ranks = _recorder.Ranks;
-        _osd.Track = _arena.TrackName;
+        _osd.LevelName = _arena.LevelName;
         // rebuild the status string only when it changes (avoids a per-tick string alloc)
         int key = _raceArmed ? -1 : _raceRunning ? _gatePassed : -2;
         if (key != _statusKey)

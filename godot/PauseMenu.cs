@@ -64,7 +64,7 @@ public partial class PauseMenu : CanvasLayer
         v.AddChild(_first);
         v.AddChild(UiTheme.MenuItem("Restart lap", () => _ctrl.RestartRace(), 300f));
         v.AddChild(UiTheme.MenuItem("Levels", () => _ctrl.OpenLevels(fromPause: true), 300f));
-        v.AddChild(UiTheme.MenuItem("Watch best lap", () => _ctrl.WatchBest(_ctrl.TrackIndex), 300f));
+        v.AddChild(UiTheme.MenuItem("Watch best lap", () => _ctrl.WatchBest(_ctrl.LevelIndex), 300f));
         v.AddChild(UiTheme.MenuItem("Settings", () => _ctrl.OpenSettings(fromPause: true), 300f));
         v.AddChild(UiTheme.MenuItem("Controls", () => _ctrl.OpenHelp(), 300f));
         v.AddChild(UiTheme.MenuItem("Main menu", () => _ctrl.OpenMain(), 300f));

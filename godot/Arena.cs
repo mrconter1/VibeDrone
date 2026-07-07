@@ -13,7 +13,7 @@ public partial class Arena : Node3D
     private ShaderMaterial _groundMat = null!;
 
     public Level CurrentLevel => _level;
-    public string TrackName => _level?.Name ?? "";
+    public string LevelName => _level?.Name ?? "";
     public IReadOnlyList<Node3D> Gates => _gates;
     public IReadOnlyList<Area3D> GateTriggers => _triggers;
     public IReadOnlyList<PropNode> Props => _props;
