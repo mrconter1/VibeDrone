@@ -19,6 +19,7 @@ public partial class PlaybackController : Node3D
     private readonly List<Vector3> _trailPts = new();
     private readonly List<float> _trailAge = new();
     private readonly List<Vector3> _trailRight = new();
+    private readonly List<float> _trailTimes = new();   // interior sample times, reused each frame
     private bool _active;
     private float _time;
     private float _orbitYaw, _orbitPitch;          // mouse-controlled offset from behind the drone
@@ -122,24 +123,14 @@ public partial class PlaybackController : Node3D
         _cam.LookAt(pos, Vector3.Up);
     }
 
-    // Fading ribbon behind the replay drone, sampled from the best-lap path.
+    // Fading ribbon behind the replay drone: the interior is sampled at a fixed step along the
+    // best-lap path (the replay has no discrete recorded points of its own to reuse).
     private void BuildTrail()
     {
-        const float window = 1.2f, halfW = 0.4f, step = 0.03f;
-        float t0 = Mathf.Max(_time - window, 0f);
-        if (_time - t0 < 0.05f) { _trail.Visible = false; return; }
-
-        _trailPts.Clear();
-        _trailAge.Clear();
-        _trailRight.Clear();
-        for (float t = t0; t < _time; t += step)
-        {
-            _ctrl.SampleBestLap(t, out Vector3 p, out Quaternion r);
-            _trailPts.Add(p); _trailAge.Add((_time - t) / window); _trailRight.Add(new Basis(r).X);
-        }
-        _ctrl.SampleBestLap(_time, out Vector3 head, out Quaternion hr);
-        _trailPts.Add(head); _trailAge.Add(0f); _trailRight.Add(new Basis(hr).X);
-
-        _trail.Build(_trailPts, _trailRight, _trailAge, halfW);
+        const float window = 1.2f, step = 0.03f;
+        _trailTimes.Clear();
+        for (float t = Mathf.Max(_time - window, 0f); t < _time; t += step) _trailTimes.Add(t);
+        TrailBuilder.Build(_trail, _time, 0f, window, 0.4f,
+            _trailTimes, _ctrl.SampleBestLap, _trailPts, _trailAge, _trailRight);
     }
 }

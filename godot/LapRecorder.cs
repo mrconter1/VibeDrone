@@ -18,6 +18,7 @@ public partial class LapRecorder : Node3D
     private readonly List<Vector3> _trailPts = new();
     private readonly List<float> _trailAge = new();
     private readonly List<Vector3> _trailRight = new();
+    private readonly List<float> _trailTimes = new();   // interior sample times, reused each frame
 
     private readonly List<float> _bestLaps = new();      // ranked fastest laps (persisted)
 
@@ -100,33 +101,14 @@ public partial class LapRecorder : Node3D
         rot = a.Rot.Slerp(b.Rot, u);
     }
 
-    // A fading ribbon along the ghost's recent path (~1.2 s), both ends interpolated so it
-    // grows/recedes smoothly; side vector = drone right-axis so it rolls with the drone.
+    // A fading ribbon along the ghost's recent path (~1.2 s): the recorded sample points are the
+    // interior; TrailBuilder interpolates both ends so it grows/recedes smoothly.
     private void BuildTrail(float lapTime)
     {
-        const float window = 1.2f, halfW = 0.4f;
-        float tailT = Mathf.Max(lapTime - window, _bestGhost[0].T);
-        if (lapTime - tailT < 0.05f) { _trail.Visible = false; return; }
-
-        _trailPts.Clear();
-        _trailAge.Clear();
-        _trailRight.Clear();
-        SampleBestLap(tailT, out Vector3 tp, out Quaternion tr);
-        _trailPts.Add(tp); _trailAge.Add(1f); _trailRight.Add(new Basis(tr).X);
-        for (int i = 0; i < _bestGhost.Count; i++)
-        {
-            float t = _bestGhost[i].T;
-            if (t > tailT && t < lapTime)
-            {
-                _trailPts.Add(_bestGhost[i].Pos);
-                _trailAge.Add((lapTime - t) / window);
-                _trailRight.Add(new Basis(_bestGhost[i].Rot).X);
-            }
-        }
-        SampleBestLap(lapTime, out Vector3 hp, out Quaternion hr);
-        _trailPts.Add(hp); _trailAge.Add(0f); _trailRight.Add(new Basis(hr).X);
-
-        _trail.Build(_trailPts, _trailRight, _trailAge, halfW);
+        _trailTimes.Clear();
+        for (int i = 0; i < _bestGhost.Count; i++) _trailTimes.Add(_bestGhost[i].T);
+        TrailBuilder.Build(_trail, lapTime, _bestGhost[0].T, 1.2f, 0.4f,
+            _trailTimes, SampleBestLap, _trailPts, _trailAge, _trailRight);
     }
 
     private void RecordLap(float t)
