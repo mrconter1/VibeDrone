@@ -5,8 +5,10 @@ using Godot;
 // Started from the Esc menu; Esc exits. Pauses the game and runs (ProcessMode=Always).
 public partial class PlaybackController : Node3D
 {
-    [Export] public float Distance = 4.5f;   // chase distance behind the drone
-    [Export] public float Height = 1.4f;     // chase height above the drone
+    [Export] public float Distance = 4.5f;         // chase distance from the drone (wheel zooms)
+    [Export] public float MouseSensitivity = 0.005f;
+
+    private const float BasePitch = 0.30f;         // default look-down (~ the old 1.4 m height)
 
     private LapRecorder _ctrl = null!;
     private Camera3D _droneCam = null!;
@@ -19,6 +21,7 @@ public partial class PlaybackController : Node3D
     private readonly List<Vector3> _trailRight = new();
     private bool _active;
     private float _time;
+    private float _orbitYaw, _orbitPitch;          // mouse-controlled offset from behind the drone
 
     public void Setup(LapRecorder recorder, Camera3D droneCam) { _ctrl = recorder; _droneCam = droneCam; }
 
@@ -39,7 +42,7 @@ public partial class PlaybackController : Node3D
         AddChild(layer);
         _hint = new Label
         {
-            Text = "PLAYBACK - best lap   |   Esc to exit",
+            Text = "PLAYBACK - best lap   |   mouse orbit   wheel zoom   Esc exit",
             Position = new Vector2(40, 40),
             Visible = false,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -52,6 +55,7 @@ public partial class PlaybackController : Node3D
         if (!_ctrl.HasBestLap) return;   // nothing recorded yet
         _active = true;
         _time = 0f;
+        _orbitYaw = 0f; _orbitPitch = 0f;   // start behind the drone
         _drone.Visible = true;
         _hint.Visible = true;
         GetTree().Paused = true;
@@ -74,10 +78,21 @@ public partial class PlaybackController : Node3D
     // _Input (not _UnhandledInput) so Esc is caught before the pause menu sees it.
     public override void _Input(InputEvent ev)
     {
-        if (_active && ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        if (!_active) return;
+        if (ev is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
             Stop();
             GetViewport().SetInputAsHandled();   // don't also open the pause menu
+        }
+        else if (ev is InputEventMouseMotion mm)   // orbit around the drone
+        {
+            _orbitYaw -= mm.Relative.X * MouseSensitivity;
+            _orbitPitch = Mathf.Clamp(_orbitPitch - mm.Relative.Y * MouseSensitivity, -1.1f, 1.0f);
+        }
+        else if (ev is InputEventMouseButton { Pressed: true } mb)   // wheel zoom
+        {
+            if (mb.ButtonIndex == MouseButton.WheelUp) Distance = Mathf.Max(Distance / 1.1f, 2f);
+            else if (mb.ButtonIndex == MouseButton.WheelDown) Distance = Mathf.Min(Distance * 1.1f, 30f);
         }
     }
 
@@ -96,11 +111,15 @@ public partial class PlaybackController : Node3D
         _ctrl.SampleBestLap(_time, out Vector3 pos, out Quaternion rot);
         _drone.GlobalTransform = new Transform3D(new Basis(rot), pos);
 
+        // orbit around the drone: behind its heading by default, offset by the mouse. Looks at it.
         Vector3 fwd = new Basis(rot).Z;                  // drone forward (Godot +Z)
-        Vector3 want = pos - fwd * Distance + Vector3.Up * Height;
+        float yaw = Mathf.Atan2(fwd.X, fwd.Z) + Mathf.Pi + _orbitYaw;   // behind (+PI) + mouse
+        float pitch = Mathf.Clamp(BasePitch + _orbitPitch, -1.3f, 1.3f);
+        var dir = new Vector3(Mathf.Sin(yaw) * Mathf.Cos(pitch), Mathf.Sin(pitch), Mathf.Cos(yaw) * Mathf.Cos(pitch));
+        Vector3 want = pos + dir * Distance;
         _cam.GlobalPosition = snap ? want
-            : _cam.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-6f * delta));
-        _cam.LookAt(pos + fwd * 2f, Vector3.Up);
+            : _cam.GlobalPosition.Lerp(want, 1f - Mathf.Exp(-8f * delta));
+        _cam.LookAt(pos, Vector3.Up);
     }
 
     // Fading ribbon behind the replay drone, sampled from the best-lap path.
