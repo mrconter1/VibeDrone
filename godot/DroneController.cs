@@ -48,6 +48,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private GameMode _mode = GameMode.Race;
     private float _idleTime;       // seconds since meaningful pilot input (race auto-reset)
     private float _prevThrottle;   // to detect throttle changes as "input"
+    private MeshInstance3D _startPad = null!;   // launch pad at the start; vanishes on takeoff
+    private Basis _armBasis = Basis.Identity;   // level facing-out pose while resting on the pad
 
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
@@ -99,6 +101,22 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _drone.AddChild(_cam);
         _cam.Position = new Vector3(0f, CameraUp, CameraForward);   // nose mount (drone local frame)
         _cam.RotationDegrees = new Vector3(Config.CameraTilt, 180f, 0f);   // uptilt (Settings > Drone)
+
+        _startPad = new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(1.5f, 0.12f, 1.5f) },
+            MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.24f, 0.80f, 0.96f, 0.85f),
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                EmissionEnabled = true,
+                Emission = new Color(0.24f, 0.80f, 0.96f),
+                EmissionEnergyMultiplier = 2f,
+            },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Visible = false,
+        };
+        AddChild(_startPad);
     }
 
     // HUD, audio, the ghost/lap recorder + its HUD presenter, and the replay theatre.
@@ -157,7 +175,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         AddChild(new CursorAutoHide());   // hide the menu cursor until the mouse moves, then after idle
 
         _edit = new EditController();
-        _edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
+        _edit.Setup(this, _cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
         AddChild(_edit);
     }
 
@@ -205,7 +223,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     // Visual-only (ghost + trail) at render rate, not the 250 Hz physics rate.
     public override void _Process(double delta)
     {
-        if (_race.Running) _recorder.UpdateVisuals(_race.LapTime, true);
+        if (_race.Running) _recorder.UpdateVisuals(_race.LapTime, true, _drone.GlobalPosition);
         else _recorder.HideGhost();
     }
 
@@ -256,8 +274,10 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         {
             bool go = Mathf.Abs(s.Throttle - _armThrottle) > 0.08f
                    || Mathf.Abs(s.Roll) > 0.06f || Mathf.Abs(s.Pitch) > 0.06f || Mathf.Abs(s.Yaw) > 0.06f;
-            if (go) { _race.Launch(); _recorder.BeginLap(); return true; }
+            if (go) { _startPad.Visible = false; _race.Launch(); _recorder.BeginLap(); return true; }   // fly away: pad gone
         }
+        // rest on the pad but let the pilot tilt the drone on the spot (pitch forward on the edge) without falling
+        _drone.GlobalBasis = (_armBasis * new Basis(Vector3.Right, -s.Pitch * 0.5f) * new Basis(Vector3.Forward, s.Roll * 0.4f)).Orthonormalized();
         _curThrottle = s.Throttle; _audio.SetEffort(0f); _recorder.HideGhost();   // idle: no clock, no ghost
         ApplyHud("LIVE");
         return false;
@@ -352,6 +372,16 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _fm.Rot = NQuat.CreateFromAxisAngle(NVec.UnitY, yawModel);
         ApplyTransform(_fm.Pos, _fm.Rot);
         _drone.ResetPhysicsInterpolation();   // teleport: don't sweep from the old pose
+
+        _armBasis = _drone.GlobalBasis;        // level facing-out pose (armed tilt pivots from here)
+        if (_mode == GameMode.Race)            // rest on a launch pad at the start; it vanishes on takeoff
+        {
+            Vector3 padPos = pos - Vector3.Up * 0.21f - look * 0.6f;   // under the nose, nose over the front edge
+            _startPad.GlobalPosition = padPos;
+            _startPad.LookAt(padPos + look, Vector3.Up);
+            _startPad.Visible = true;
+        }
+        else _startPad.Visible = false;
     }
 
     // (Re)connect each gate's pass-through trigger. Called on launch and after a track rebuild,
@@ -500,6 +530,17 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         string id = LevelStore.IdAt(index);
         LapRecorder.ClearRecords(id);
         if (index == _levelIndex) _recorder.SetLevel(id);
+    }
+
+    // Editing changes the layout, so the current level's saved runs no longer match - the editor
+    // warns before entering and clears them on confirm.
+    public bool CurrentLevelHasRecords() => LapRecorder.TopLapsFor(LevelStore.IdAt(_levelIndex)).Length > 0;
+
+    public void ClearCurrentLevelRecords()
+    {
+        string id = LevelStore.IdAt(_levelIndex);
+        LapRecorder.ClearRecords(id);
+        _recorder.SetLevel(id);
     }
 
 

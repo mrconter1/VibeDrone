@@ -65,4 +65,17 @@ public partial class DroneModel : Node3D
         float spin = (float)delta * 90f;   // fast visual spin
         foreach (Node3D p in _props) p.RotateY(spin);
     }
+
+    // Fade the whole model (0 = opaque, 1 = invisible) - used to fade the ghost when the live drone
+    // gets close so it doesn't block the view.
+    public void SetFade(float t)
+    {
+        foreach (Node c in GetChildren()) Fade(c, t);
+    }
+
+    private static void Fade(Node n, float t)
+    {
+        if (n is GeometryInstance3D gi) gi.Transparency = t;
+        foreach (Node c in n.GetChildren()) Fade(c, t);
+    }
 }

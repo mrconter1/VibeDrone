@@ -64,8 +64,9 @@ public partial class LapRecorder : Node3D
         return isBest;
     }
 
-    // Called at render rate: place the ghost + draw its trail, or hide when not racing.
-    public void UpdateVisuals(float lapTime, bool running)
+    // Called at render rate: place the ghost + draw its trail, or hide when not racing. Fades the
+    // ghost + trail out as the live drone (dronePos) gets close, so they don't block the FPV view.
+    public void UpdateVisuals(float lapTime, bool running, Vector3 dronePos)
     {
         if (!running || _bestGhost.Count < 2) { _ghost.Visible = false; _trail.Visible = false; return; }
         _ghost.Visible = true;
@@ -73,6 +74,12 @@ public partial class LapRecorder : Node3D
         Sample a = _bestGhost[_ghostIdx], b = _bestGhost[_ghostIdx + 1];
         float u = Mathf.Clamp((lapTime - a.T) / Mathf.Max(b.T - a.T, 1e-4f), 0f, 1f);
         _ghost.GlobalTransform = new Transform3D(new Basis(a.Rot.Slerp(b.Rot, u)), a.Pos.Lerp(b.Pos, u));
+
+        // proximity fade: full at >5 m, gone at ~1.2 m. The trail fades fully; the ghost keeps a faint hint.
+        float close = Mathf.Clamp((5f - _ghost.GlobalPosition.DistanceTo(dronePos)) / 3.8f, 0f, 1f);
+        _ghost.SetFade(close * 0.85f);
+        _trail.Alpha = 1f - close;
+
         BuildTrail(lapTime);
     }
 

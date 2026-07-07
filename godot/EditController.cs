@@ -18,6 +18,7 @@ public partial class EditController : Node3D
 
     private const float PosStep = 0.5f, RotStep = 15f, SizeStep = 0.25f;
 
+    private DroneController _ctrl = null!;
     private Camera3D _cam = null!;
     private Camera3D _droneCam = null!;
     private MotorAudio _audio = null!;
@@ -25,6 +26,8 @@ public partial class EditController : Node3D
     private Label _hint = null!;
     private EditReticle _reticle = null!;
     private EditInspector _inspector = null!;
+    private CanvasLayer _warn = null!;
+    private bool _warnShown;
     private MeshInstance3D _highlight = null!;
     private StandardMaterial3D _highlightMat = null!;
     private bool _active;
@@ -46,8 +49,8 @@ public partial class EditController : Node3D
         new(0.68f, 0.60f, 0.44f), new(0.34f, 0.44f, 0.36f), new(0.55f, 0.35f, 0.30f),
     };
 
-    public void Setup(Camera3D droneCam, MotorAudio audio, Arena arena)
-    { _droneCam = droneCam; _audio = audio; _arena = arena; }
+    public void Setup(DroneController ctrl, Camera3D droneCam, MotorAudio audio, Arena arena)
+    { _ctrl = ctrl; _droneCam = droneCam; _audio = audio; _arena = arena; }
 
     public override void _Ready()
     {
@@ -87,10 +90,63 @@ public partial class EditController : Node3D
             Visible = false,
         };
         AddChild(_highlight);
+
+        BuildWarning();
+    }
+
+    // A blocking "editing deletes saved runs" confirm, shown before entering the editor on a level
+    // that still has records.
+    private void BuildWarning()
+    {
+        _warn = new CanvasLayer { Layer = 12, Visible = false };
+        AddChild(_warn);
+
+        var root = new Control { Theme = UiTheme.Get() };
+        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _warn.AddChild(root);
+
+        var dim = new ColorRect { Color = new Color(0.01f, 0.015f, 0.02f, 0.66f) };
+        dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(dim);
+
+        var center = new CenterContainer();
+        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(center);
+
+        var panel = new PanelContainer { Theme = UiTheme.Get() };
+        center.AddChild(panel);
+        var margin = new MarginContainer();
+        foreach (var m in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" })
+            margin.AddThemeConstantOverride(m, 34);
+        panel.AddChild(margin);
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(420, 0) };
+        box.AddThemeConstantOverride("separation", 12);
+        margin.AddChild(box);
+
+        var title = UiTheme.Heading("Edit this level?", 24);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        box.AddChild(title);
+        var body = UiTheme.Body("Editing changes the layout, so this level's saved runs (lap times + "
+            + "ghost) will be deleted.", UiTheme.TextDim, 15);
+        body.HorizontalAlignment = HorizontalAlignment.Center;
+        body.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        box.AddChild(body);
+        var hint = UiTheme.Body("Enter  edit + clear runs        Esc  cancel", UiTheme.Accent, 15);
+        hint.HorizontalAlignment = HorizontalAlignment.Center;
+        box.AddChild(hint);
     }
 
     public override void _Input(InputEvent ev)
     {
+        if (_warnShown)   // modal: Enter confirms (clear + edit), Esc cancels
+        {
+            if (ev is InputEventKey { Pressed: true } wk)
+            {
+                if (wk.Keycode is Key.Enter or Key.KpEnter) { ConfirmEdit(); GetViewport().SetInputAsHandled(); }
+                else if (wk.Keycode == Key.Escape) { CancelEdit(); GetViewport().SetInputAsHandled(); }
+            }
+            return;
+        }
         if (!_active) return;
         if (ev is InputEventMouseMotion mm)
         {
@@ -105,12 +161,45 @@ public partial class EditController : Node3D
         }
     }
 
-    public void Open() { if (!_active) Toggle(); }   // enter the builder from code
+    public void Open() { if (!_active) RequestToggle(); }   // enter the builder from code
+
+    // Enter the editor, but first warn (and clear on confirm) if the current level has saved runs.
+    private void RequestToggle()
+    {
+        if (_active) { Toggle(); return; }
+        if (_ctrl.CurrentLevelHasRecords()) ShowWarning();
+        else Toggle();
+    }
+
+    private void ShowWarning()
+    {
+        _warnShown = true;
+        _warn.Visible = true;
+        GetTree().Paused = true;
+        Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    private void ConfirmEdit()
+    {
+        _warnShown = false;
+        _warn.Visible = false;
+        _ctrl.ClearCurrentLevelRecords();
+        Toggle();   // enters the editor (pauses + captures the cursor)
+    }
+
+    private void CancelEdit()
+    {
+        _warnShown = false;
+        _warn.Visible = false;
+        GetTree().Paused = false;
+        Input.MouseMode = Input.MouseModeEnum.Captured;   // back to flying
+    }
 
     public override void _UnhandledInput(InputEvent ev)
     {
         if (ev is not InputEventKey key) return;
-        if (key is { Pressed: true, Keycode: Key.E, Echo: false }) { Toggle(); GetViewport().SetInputAsHandled(); return; }
+        if (_warnShown) return;   // the modal handles its own keys in _Input
+        if (key is { Pressed: true, Keycode: Key.E, Echo: false }) { RequestToggle(); GetViewport().SetInputAsHandled(); return; }
         if (!_active) return;
 
         if (key.Pressed) HandleKeyDown(key);

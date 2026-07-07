@@ -7,6 +7,8 @@ using Godot;
 // tail. Shared by the in-race ghost trail and the playback trail.
 public partial class TrailRibbon : MeshInstance3D
 {
+    public float Alpha = 1f;   // global multiplier, faded down when the live drone is close
+
     private ImmediateMesh _mesh = null!;
 
     public override void _Ready()
@@ -30,7 +32,7 @@ public partial class TrailRibbon : MeshInstance3D
     public void Build(IReadOnlyList<Vector3> pts, IReadOnlyList<Vector3> right, IReadOnlyList<float> age, float halfWidth)
     {
         _mesh.ClearSurfaces();
-        if (pts.Count < 2) { Visible = false; return; }
+        if (pts.Count < 2 || Alpha <= 0.01f) { Visible = false; return; }
         Visible = true;
         _mesh.SurfaceBegin(Mesh.PrimitiveType.TriangleStrip);
         for (int i = 0; i < pts.Count; i++)
@@ -38,7 +40,7 @@ public partial class TrailRibbon : MeshInstance3D
             Vector3 r = right[i];
             Vector3 side = (r.LengthSquared() > 1e-6f ? r.Normalized() : Vector3.Right) * (halfWidth * (1f - age[i]));
             float a = 1f - age[i];
-            var col = new Color(0.4f, 0.95f, 1f, a * a);   // fade toward the tail (eased)
+            var col = new Color(0.4f, 0.95f, 1f, a * a * Alpha);   // fade toward the tail (eased), times global fade
             _mesh.SurfaceSetColor(col);
             _mesh.SurfaceAddVertex(pts[i] - side);
             _mesh.SurfaceSetColor(col);
