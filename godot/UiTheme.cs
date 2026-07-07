@@ -51,9 +51,6 @@ public static class UiTheme
 
     // --- component factories ---
 
-    // A frosted panel sized/positioned by the caller, already themed.
-    public static Panel Panel() => new() { Theme = Get() };
-
     public static Label Title(string text, int size = 44)
     {
         var l = new Label { Text = text };

@@ -10,7 +10,7 @@ config/features=PackedStringArray("4.3", "C#", "Forward Plus")
 
 ; Replace the Godot boot splash with our own VibeDrone logo (boot.png), painted on a
 ; dark background the instant the engine window opens - before .NET/the scene load - so
-; the logo is visible immediately with no black gap, then our LoadingScreen takes over.
+; the logo is visible immediately with no black gap, then hands straight to the main menu.
 boot_splash/show_image=true
 boot_splash/image="res://boot.png"
 boot_splash/fullsize=false

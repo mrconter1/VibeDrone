@@ -90,7 +90,6 @@ public partial class MotorAudio : AudioStreamPlayer
         _pb = (AudioStreamGeneratorPlayback)GetStreamPlayback();
     }
 
-    public void Cycle() => Variant = (Variant + 1) % (VariantCount + 1);
     public void SetVariant(int v) => Variant = Mathf.Clamp(v, 0, VariantCount);
     public void SetEffort(float e) => _effortTarget = Mathf.Clamp(e, 0f, 1f);
 
