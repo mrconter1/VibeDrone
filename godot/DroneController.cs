@@ -31,8 +31,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private MotorAudio _audio = null!;
     private float _flightTime;
     private float _curThrottle;
-    private int _statusKey = int.MinValue;   // caches the HUD race-status string
-    private string _statusText = "";
+    private HudPresenter _hud = null!;   // marshals live state into the HUD each tick
     private SessionLog _sessionLog = null!;
     private Arena _arena = null!;
 
@@ -100,6 +99,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
         _recorder = new LapRecorder();
         AddChild(_recorder);   // owns the ghost + trail + best-lap board, loads on _Ready
+
+        _hud = new HudPresenter(_osd, _drone, _fm, _cam, _audio, _race, _recorder, _arena);
 
         _playback = new PlaybackController();
         _playback.Setup(_recorder, _cam);
@@ -434,37 +435,5 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     }
 
 
-    private void ApplyHud(string mode)
-    {
-        if (_osd == null) return;
-        Basis b = _drone.GlobalTransform.Basis;
-        _osd.Mode = mode;
-        _osd.Speed = _fm.Vel.Length();
-        _osd.Alt = _drone.GlobalPosition.Y;
-        _osd.Throttle = _curThrottle;
-        _osd.TimeSec = _flightTime;
-        _osd.Fov = _cam.Fov;
-        _osd.Fps = (float)Engine.GetFramesPerSecond();
-        _osd.Sound = _audio.CurrentName;
-        _osd.ShowDebug = _showDebug;
-        _osd.DevReload = _devSupervised;
-        int regular = _arena.GateTriggers.Count - 1;
-        _osd.LapTime = _race.LapTime;
-        _osd.LastLap = _recorder.LastLap;
-        _osd.BestLap = _recorder.BestLap;
-        _osd.Ranks = _recorder.Ranks;
-        _osd.LevelName = _arena.LevelName;
-        // rebuild the status string only when it changes (avoids a per-tick string alloc)
-        int key = _race.Armed ? -1 : _race.Running ? _race.GatePassed : -2;
-        if (key != _statusKey)
-        {
-            _statusKey = key;
-            _statusText = _race.Armed ? "GO!  (throttle up)"
-                        : _race.Running ? $"gate {_race.GatePassed}/{regular}" : "R to start";
-        }
-        _osd.RaceStatus = _statusText;
-        // climb angle (pitch) and roll from the drone basis, for the artificial horizon
-        _osd.PitchDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(b.Z.Y, -1f, 1f)));
-        _osd.RollDeg = Mathf.RadToDeg(Mathf.Atan2(b.X.Y, b.Y.Y));
-    }
+    private void ApplyHud(string mode) => _hud.Update(mode, _curThrottle, _flightTime, _showDebug, _devSupervised);
 }
