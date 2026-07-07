@@ -8,10 +8,13 @@ config/name="OpenDrone"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.3", "C#", "Forward Plus")
 
-; No engine boot splash: hide the Godot logo and paint the boot window our own dark
-; colour so the very first frame already matches the loading screen - no Godot branding,
-; no white flash, straight into our own LoadingScreen.
-boot_splash/show_image=false
+; Replace the Godot boot splash with our own VibeDrone logo (boot.png), painted on a
+; dark background the instant the engine window opens - before .NET/the scene load - so
+; the logo is visible immediately with no black gap, then our LoadingScreen takes over.
+boot_splash/show_image=true
+boot_splash/image="res://boot.png"
+boot_splash/fullsize=false
+boot_splash/use_filter=true
 boot_splash/bg_color=Color(0.02, 0.025, 0.03, 1)
 
 [display]
