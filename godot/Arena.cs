@@ -163,9 +163,14 @@ public partial class Arena : Node3D
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 void fragment() {
-    vec2 g = floor(UV * 8.0);
+    vec2 p = UV * 8.0;
+    vec2 g = floor(p);
     float c = mod(g.x + g.y, 2.0);
-    ALBEDO = mix(vec3(0.02), vec3(0.95), c);
+    // analytic anti-alias: when a checker cell shrinks below ~1 pixel (far / oblique), fade to the
+    // average grey instead of letting the black/white alternate and shimmer.
+    float texel = max(fwidth(p).x, fwidth(p).y);
+    float aa = clamp(texel - 0.5, 0.0, 1.0);
+    ALBEDO = mix(mix(vec3(0.02), vec3(0.95), c), vec3(0.485), aa);
 }
 ";
 

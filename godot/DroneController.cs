@@ -67,14 +67,16 @@ public partial class DroneController : Node3D
     private SettingsMenu _settings = null!;
     private PauseMenu _pause = null!;
     private HelpOverlay _help = null!;
+    private BlurMenu _blurMenu = null!;
 
     public override void _Ready()
     {
         // prefer short GC pauses over throughput: fewer gen2 stalls = fewer missed frames
         GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
 
-        Config.Load();                                       // UI scale + blur mode preferences
+        Config.Load();                                       // UI scale + blur + AA preferences
         GetTree().Root.ContentScaleFactor = Config.UiScale;  // scale the whole UI (fonts + sizes)
+        ApplyAA();                                            // MSAA + FXAA (fixes edge/checker shimmer)
 
         _sessionLog = new SessionLog();
         AddChild(_sessionLog);
@@ -130,6 +132,9 @@ public partial class DroneController : Node3D
         _pause = new PauseMenu();
         _pause.Setup(this);
         AddChild(_pause);
+        _blurMenu = new BlurMenu();
+        _blurMenu.Setup(this);
+        AddChild(_blurMenu);   // B toggles it over the full-screen menus
 
         var edit = new EditController();
         edit.Setup(_cam, _audio, _arena);   // E toggles a Minecraft-style free-fly camera (pauses the game)
@@ -459,8 +464,23 @@ public partial class DroneController : Node3D
     public void SetShowDebug(bool on) => _showDebug = on;
     public bool ShowDebug => _showDebug;
 
-    public string CycleBlur() => _backdrop.Cycle();   // main-menu B
-    public string BlurName => _backdrop.ModeName;
+    // blur menu (B) toggles a live tuning panel over the full-screen menus
+    public bool MenuActive => _screen is Screen.Main or Screen.Levels or Screen.Settings;
+    public void ToggleBlurMenu() { if (MenuActive) _blurMenu.Toggle(); }
+    public void RefreshBackdrop() => _backdrop.Refresh();
+
+    public void ApplyAA()
+    {
+        var vp = GetViewport();
+        vp.Msaa3D = Config.Msaa switch
+        {
+            2 => Viewport.Msaa.Msaa2X,
+            4 => Viewport.Msaa.Msaa4X,
+            8 => Viewport.Msaa.Msaa8X,
+            _ => Viewport.Msaa.Disabled,
+        };
+        vp.ScreenSpaceAA = Config.Fxaa ? Viewport.ScreenSpaceAAEnum.Fxaa : Viewport.ScreenSpaceAAEnum.Disabled;
+    }
 
     public float UiScale => Config.UiScale;
     public void ApplyUiScale(float scale)
