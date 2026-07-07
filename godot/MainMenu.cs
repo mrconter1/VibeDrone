@@ -69,7 +69,7 @@ public partial class MainMenu : MenuScreen
     {
         Button b = UiTheme.MenuItem(text, onPressed, MenuWidth);
         b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
-        b.Alignment = HorizontalAlignment.Left;
+        b.Alignment = HorizontalAlignment.Center;   // centered text: the convention for a standalone title menu
         return b;
     }
 
