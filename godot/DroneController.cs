@@ -143,7 +143,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
         // A dev rebuild+relaunch (debug R) drops straight back into the level it was on; otherwise
         // load the first level behind the title screen.
-        string devLevel = ConsumeDevRelaunch();
+        string devLevel = DevReload.Consume();
         if (devLevel.Length > 0 && devLevel != "MAIN")   // reload into a level
         {
             SetLevelIndex(LevelStore.IndexOf(devLevel));
@@ -172,7 +172,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.R })
         {
-            if (_showDebug && _devSupervised) RequestDevReload(LevelStore.IdAt(_levelIndex));   // hot-reload this level
+            if (_showDebug && _devSupervised) DevReload.Request(GetTree(), LevelStore.IdAt(_levelIndex));   // hot-reload this level
             else { _sessionLog.Mark("race start"); StartRace(); }
         }
         else if (ev is InputEventKey { Pressed: true, Keycode: Key.H })
@@ -409,31 +409,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         StartRace();
     }
 
-    private const string DevRelaunchPath = "user://dev_relaunch.txt";
-
     // Main-menu R (under the supervisor): hot-reload and come back on the title screen.
-    public void RequestMainReload() { if (_showDebug && _devSupervised) RequestDevReload("MAIN"); }
-
-    // Debug R (only under the StartDebug supervisor): save the reload target and quit. The supervisor
-    // rebuilds the latest code and relaunches Godot; on boot "MAIN" opens the title screen, a level id
-    // resumes that level.
-    private void RequestDevReload(string target)
-    {
-        Persistence.WriteText(DevRelaunchPath, target);
-        GD.Print($"[dev] reload requested (target='{target}') - quitting for the supervisor to rebuild");
-        GetTree().Quit();
-    }
-
-    // Read + clear the dev-relaunch marker; returns the level id to resume into, or "".
-    private static string ConsumeDevRelaunch()
-    {
-        if (Persistence.TryReadText(DevRelaunchPath, out string id) && id.Trim().Length > 0)
-        {
-            DirAccess.RemoveAbsolute(DevRelaunchPath);
-            return id.Trim();
-        }
-        return "";
-    }
+    public void RequestMainReload() { if (_showDebug && _devSupervised) DevReload.Request(GetTree(), "MAIN"); }
 
     private void StartRace()
     {
