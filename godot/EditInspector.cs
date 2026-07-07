@@ -16,15 +16,18 @@ public partial class EditInspector : Control
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
-        SetAnchorsPreset(LayoutPreset.FullRect);   // fill the screen so the panel anchors to its corner
+        // Under a CanvasLayer a Control's FullRect anchors don't resolve, so size it to the viewport
+        // explicitly (and follow resizes) - otherwise the top-right panel anchors off-screen.
+        SetAnchorsPreset(LayoutPreset.TopLeft);
+        FitToViewport();
+        GetViewport().SizeChanged += FitToViewport;
 
-        // pin the panel's top-right corner (20px in) and let it grow left + down to fit its content
+        // fixed-width panel pinned to the top-right, growing DOWN to fit its content
         _panel = new PanelContainer { Theme = UiTheme.Get() };
         _panel.SetAnchorsPreset(LayoutPreset.TopRight);
-        _panel.GrowHorizontal = GrowDirection.Begin;
         _panel.GrowVertical = GrowDirection.End;
-        _panel.OffsetLeft = -20; _panel.OffsetRight = -20;
-        _panel.OffsetTop = 20; _panel.OffsetBottom = 20;
+        _panel.OffsetLeft = -318; _panel.OffsetRight = -18;   // 300px wide, 18px from the right edge
+        _panel.OffsetTop = 18; _panel.OffsetBottom = 18;
         AddChild(_panel);
 
         var pad = new MarginContainer();
@@ -32,7 +35,7 @@ public partial class EditInspector : Control
             pad.AddThemeConstantOverride(m, 16);
         _panel.AddChild(pad);
 
-        var v = new VBoxContainer { CustomMinimumSize = new Vector2(280, 0) };
+        var v = new VBoxContainer { CustomMinimumSize = new Vector2(250, 0) };
         v.AddThemeConstantOverride("separation", 6);
         pad.AddChild(v);
 
@@ -48,6 +51,8 @@ public partial class EditInspector : Control
 
         Visible = false;
     }
+
+    private void FitToViewport() => Size = GetViewportRect().Size;
 
     public void Render(string title, IReadOnlyList<Row> rows, string footer)
     {
