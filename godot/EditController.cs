@@ -16,8 +16,8 @@ public partial class EditController : Node3D
     [Export] public float HighlightRadius = 5f;
     [Export] public float RotSpeed = 90f;
 
-    private const float PosStep = 0.25f, RotStep = 45f, SizeStep = 0.25f;   // 0.25 m grid, 45 deg cardinals
-    private const float Grid = 0.25f;
+    private const float PosStep = 0.5f, RotStep = 45f, SizeStep = 0.25f;   // 0.5 m grid, 45 deg cardinals
+    private const float Grid = 0.5f;
 
     private DroneController _ctrl = null!;
     private Camera3D _cam = null!;
@@ -37,7 +37,7 @@ public partial class EditController : Node3D
 
     private Node3D? _hovered;
     private Node3D? _grabbed;
-    private Vector3 _grabLocalPos;
+    private float _carryDist = 15f;   // held this far in front of the camera
     private int _colorIdx;
     private int _field;            // active inspector field
     private bool _dirtyEdit;       // an arrow nudge is in progress (record history on release)
@@ -64,8 +64,8 @@ public partial class EditController : Node3D
         AddChild(layer);
         _hint = new Label
         {
-            Text = "EDIT   E fly   WASD/Space/Shift move   wheel speed   C grab (drop = snap + turn 45°)   " +
-                   "1-6 rotate 45°   G rock   T gate   K clone   F flip   V colour   [ ] size   Del delete   arrows nudge   Ctrl+Z undo",
+            Text = "EDIT   E fly   WASD/Space/Shift move   wheel speed   C grab/drop (turn the view to aim; snaps to 0.5 m + 45°)   " +
+                   "G rock   T gate   K clone   F flip   V colour   [ ] size   Del delete   arrows nudge   Ctrl+Z undo",
             Position = new Vector2(40, 40),
             Visible = false,
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -213,12 +213,6 @@ public partial class EditController : Node3D
         switch (key.Keycode)
         {
             case Key.C when !echo: GrabOrDrop(); break;
-            case Key.Key1 when _grabbed != null && !echo: StepRot(Vector3.Up, RotStep); break;      // yaw +45
-            case Key.Key2 when _grabbed != null && !echo: StepRot(Vector3.Up, -RotStep); break;     // yaw -45
-            case Key.Key3 when _grabbed != null && !echo: StepRot(Vector3.Right, RotStep); break;   // pitch +45
-            case Key.Key4 when _grabbed != null && !echo: StepRot(Vector3.Right, -RotStep); break;  // pitch -45
-            case Key.Key5 when _grabbed != null && !echo: StepRot(Vector3.Forward, RotStep); break; // roll +45
-            case Key.Key6 when _grabbed != null && !echo: StepRot(Vector3.Forward, -RotStep); break;// roll -45
             case Key.G when !echo: SpawnRock(); break;
             case Key.T when !echo: SpawnGate(); break;
             case Key.K when !echo: CloneFocused(); break;
@@ -269,55 +263,30 @@ public partial class EditController : Node3D
 
     // --- object actions ---
 
-    // Drop: snap to the 0.25 m grid and turn the object +45 deg (yaw), snapping to a cardinal angle -
-    // so re-grabbing and dropping the same object cycles it through the 8 cardinal orientations.
+    // Drop just records - the carried object is already snapped to the grid and a cardinal angle.
     private void GrabOrDrop()
     {
-        if (_grabbed != null) { SnapDrop(_grabbed); _grabbed = null; Commit(); return; }
+        if (_grabbed != null) { _grabbed = null; Commit(); return; }
         if (_hovered != null) Grab(_hovered);
     }
 
     private static float Snap(float v, float step) => Mathf.Round(v / step) * step;
     private static Vector3 SnapPos(Vector3 p) => new(Snap(p.X, Grid), Snap(p.Y, Grid), Snap(p.Z, Grid));
-    private static Vector3 SnapDeg(Vector3 d) => new(Snap(d.X, RotStep), Snap(d.Y, RotStep), Snap(d.Z, RotStep));
 
-    private static Quaternion SnapQuat(Quaternion q)
+    // The camera orientation snapped to the nearest 45 deg on all axes - the carried object adopts it,
+    // so turning the view aims the object (clicking between cardinal orientations).
+    private static Basis SnapBasis(Basis b)
     {
-        Vector3 e = new Basis(q).GetEuler();
+        Vector3 e = b.GetEuler();
         float s = Mathf.DegToRad(RotStep);
-        return Quaternion.FromEuler(new Vector3(Snap(e.X, s), Snap(e.Y, s), Snap(e.Z, s)));
-    }
-
-    private void SnapDrop(Node3D n)
-    {
-        if (n is PropNode pn)
-        {
-            pn.Data.Rot = SnapQuat((new Quaternion(Vector3.Up, Mathf.DegToRad(RotStep)) * pn.Data.Rot).Normalized());
-            pn.Data.Pos = SnapPos(pn.GlobalPosition);
-            pn.Refresh();
-        }
-        else
-        {
-            n.GlobalRotate(Vector3.Up, Mathf.DegToRad(RotStep));
-            n.GlobalRotationDegrees = SnapDeg(n.GlobalRotationDegrees);
-            n.GlobalPosition = SnapPos(n.GlobalPosition);
-        }
-    }
-
-    // A discrete 45 deg step of the grabbed object about a world axis (1-6 keys).
-    private void StepRot(Vector3 axis, float deg)
-    {
-        if (_grabbed == null) return;
-        float rad = Mathf.DegToRad(deg);
-        if (_grabbed is PropNode pn) { pn.Data.Rot = (new Quaternion(axis, rad) * pn.Data.Rot).Normalized(); pn.SetPoseKeepPos(pn.GlobalPosition); }
-        else _grabbed.GlobalRotate(axis, rad);
+        return Basis.FromEuler(new Vector3(Snap(e.X, s), Snap(e.Y, s), Snap(e.Z, s)));
     }
 
     private void Grab(Node3D node)
     {
         _grabbed = node;
         _hovered = null;
-        _grabLocalPos = _cam.GlobalTransform.AffineInverse() * node.GlobalPosition;
+        _carryDist = Mathf.Clamp(_cam.GlobalPosition.DistanceTo(node.GlobalPosition), 3f, 60f);
     }
 
     private void SpawnRock()
@@ -463,9 +432,11 @@ public partial class EditController : Node3D
 
         if (_grabbed != null)
         {
-            Vector3 pos = SnapPos(_cam.GlobalTransform * _grabLocalPos);   // snap to the 0.25 m grid while carrying
-            if (_grabbed is PropNode pn) { UpdatePropScale(pn, (float)delta); pn.SetPoseKeepPos(pos); }
-            else _grabbed.GlobalPosition = pos;
+            // held in front at the grab distance, snapped to the 0.5 m grid; orientation follows the view
+            Vector3 pos = SnapPos(_cam.GlobalPosition - _cam.GlobalBasis.Z * _carryDist);
+            Basis rot = SnapBasis(_cam.GlobalBasis);
+            if (_grabbed is PropNode pn) { pn.Data.Rot = rot.GetRotationQuaternion(); UpdatePropScale(pn, (float)delta); pn.SetPoseKeepPos(pos); }
+            else _grabbed.GlobalTransform = new Transform3D(rot.Orthonormalized(), pos);
         }
         else
         {
