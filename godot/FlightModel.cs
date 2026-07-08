@@ -141,5 +141,101 @@ namespace OpenDrone
             Vel = newVel;
             Pos = newPos;
         }
+
+        // --- launch-pad contact (rigid body): lets the drone rest on the start platform, tip on its
+        //     legs, balance, and lift off. Torque-driven, unlike the airborne rate model. ---
+
+        // 4 leg/motor contact points in body frame (matches a quad's arm spread).
+        public static readonly Vector3[] Legs =
+        {
+            new(0.13f, -0.035f, 0.13f), new(0.13f, -0.035f, -0.13f),
+            new(-0.13f, -0.035f, 0.13f), new(-0.13f, -0.035f, -0.13f),
+        };
+
+        // contact + rigid-body tuning (accel/torque units, mass = 1)
+        public float ContactK = 1400f;    // per-leg normal spring stiffness
+        public float ContactC = 16f;      // per-leg normal damping (lower -> more bounce)
+        public float FrictionMu = 1.0f;   // per-leg friction budget (stick-slip below)
+        public float Inertia = 0.16f;     // angular inertia (higher -> slower tipping)
+        public float TorqueGain = 0.4f;   // stick -> tilt torque (cmdBody is a rate ~11 at full stick)
+        public float MaxTorque = 6f;      // tilt torque ceiling
+        public float LevelSpring = 4f;    // restoring torque toward level (controllable lean, returns on release)
+        public float AngDrag = 0.5f;      // angular-rate damping
+        public int GroundSubsteps = 8;    // micro-steps for stiff-contact stability
+
+        // World height of the lowest leg (<= groundY means it's touching the platform).
+        public float LowestLeg()
+        {
+            float min = float.MaxValue;
+            foreach (Vector3 lo in Legs)
+            {
+                float y = Pos.Y + Rotate(Rot, lo).Y;
+                if (y < min) min = y;
+            }
+            return min;
+        }
+
+        // One tick of launch-pad dynamics: the drone rests on an (invisible) pad, held at CG height
+        // restY by a vertical spring. Attitude = direct stick tilt torque + a spring back toward level +
+        // angular drag, so you can lean it over controllably (up to ~90 deg) and it falls back when you
+        // release the stick. Collective thrust lifts it off; friction is stick-slip so it stays put.
+        // World frame (Omega in/out of body); scalar inertia -> no gyroscopic term.
+        public void StepGround(float roll, float pitch, float yaw, float throttle, float dt, float restY)
+        {
+            float sub = dt / Math.Max(1, GroundSubsteps);
+            float thrust = ThrustK * ThrustProxy(roll, pitch, yaw, throttle);
+            Vector3 cmdBody = BodyRates(roll, pitch, yaw);
+            Vector3 omegaW = Rotate(Rot, Omega);
+
+            for (int i = 0; i < GroundSubsteps; i++)
+            {
+                Vector3 up = Rotate(Rot, Vector3.UnitY);
+                Vector3 force = new Vector3(0f, -G, 0f) + up * thrust;
+
+                // vertical support at the CG (holds it on the pad; bounces on a hard landing)
+                float pen = restY - Pos.Y;
+                float nTot = 0f;
+                if (pen > 0f)
+                {
+                    float n = MathF.Max(0f, ContactK * pen - ContactC * Vel.Y);
+                    force.Y += n;
+                    nTot = n;
+                }
+
+                // attitude: stick tilt torque (works with no throttle) + a spring toward level (so lean
+                // is controllable and returns when released) + angular drag
+                Vector3 ctrl = Rotate(Rot, cmdBody) * TorqueGain;
+                float cm = ctrl.Length();
+                if (cm > MaxTorque) ctrl *= MaxTorque / cm;
+                Vector3 levelAxis = Vector3.Cross(up, Vector3.UnitY);   // |sin(tilt)| toward level
+                Vector3 torque = ctrl + levelAxis * LevelSpring - AngDrag * omegaW;
+
+                Vel += force * sub;
+                omegaW += torque / MathF.Max(Inertia, 1e-4f) * sub;
+
+                // stick-slip friction: snap the horizontal slide to zero within the budget, else slide
+                float maxDv = FrictionMu * nTot * sub;
+                float vh = MathF.Sqrt(Vel.X * Vel.X + Vel.Z * Vel.Z);
+                if (vh <= maxDv) { Vel.X = 0f; Vel.Z = 0f; }
+                else if (vh > 1e-6f) { float k = (vh - maxDv) / vh; Vel.X *= k; Vel.Z *= k; }
+
+                Pos += Vel * sub;
+                Rot = IntegrateQuatWorld(Rot, omegaW, sub);
+            }
+
+            Omega = Rotate(Rot, omegaW, inverse: true);
+        }
+
+        // World-frame quaternion integration (dq * q), counterpart to body-frame IntegrateQuat (q * dq).
+        private static Quaternion IntegrateQuatWorld(Quaternion q, Vector3 omegaWorld, float dt)
+        {
+            float w = omegaWorld.Length();
+            if (w < 1e-9f) return Quaternion.Normalize(q);
+            float ang = w * dt;
+            Vector3 axis = omegaWorld / w;
+            float s = MathF.Sin(ang * 0.5f);
+            var dq = new Quaternion(axis.X * s, axis.Y * s, axis.Z * s, MathF.Cos(ang * 0.5f));
+            return Quaternion.Normalize(dq * q);
+        }
     }
 }

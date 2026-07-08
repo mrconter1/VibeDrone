@@ -38,9 +38,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     // lap timing state
     private readonly RaceState _race = new();   // armed/running/lap-time/gate-progress/miss tracking
-    private float _armThrottle;    // resting input baseline (settles over the first moments)
-    private float _armRoll, _armPitch, _armYaw;
-    private float _armSettle;      // time armed; input is ignored until it settles
+    private float _armSettle;      // time armed on the pad before lift-off is allowed
     private bool _gateHit;         // drone touched a gate bar this frame
     private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
     private bool _devSupervised;   // launched under StartDebug -> debug R hot-reloads
@@ -50,8 +48,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private GameMode _mode = GameMode.Race;
     private float _idleTime;       // seconds since meaningful pilot input (race auto-reset)
     private float _prevThrottle;   // to detect throttle changes as "input"
-    private MeshInstance3D _startPad = null!;   // launch pad at the start; vanishes on takeoff
-    private Basis _armBasis = Basis.Identity;   // level facing-out pose while resting on the pad
+    private MeshInstance3D _startPad = null!;   // launch pad at the start; vanishes on lift-off
+    private float _padRestY;                     // CG rest height on the launch pad (StepGround)
 
     private LapRecorder _recorder = null!;   // ghost + trail + best-lap board + persistence
     private PlaybackController _playback = null!;
@@ -74,6 +72,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
 
         Config.Load();                                       // UI scale + blur + AA preferences
+        _mode = Config.LastMode == 1 ? GameMode.FreeFly : GameMode.Race;   // resume last mode (main-menu shows it)
         LegacyMigration.Run();                               // old index-keyed records -> stable-id files
         _devSupervised = OS.GetEnvironment("OPENDRONE_DEV") == "1";   // StartDebug sets this
         if (_devSupervised) _showDebug = true;                        // debug on by default under StartDebug
@@ -106,14 +105,14 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
         _startPad = new MeshInstance3D
         {
-            Mesh = new BoxMesh { Size = new Vector3(1.5f, 0.12f, 1.5f) },
+            Mesh = new BoxMesh { Size = new Vector3(0.9f, 0.06f, 0.9f) },   // small, thin launch pad
             MaterialOverride = new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.24f, 0.80f, 0.96f, 0.85f),
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 EmissionEnabled = true,
                 Emission = new Color(0.24f, 0.80f, 0.96f),
-                EmissionEnergyMultiplier = 2f,
+                EmissionEnergyMultiplier = 1.4f,
             },
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Visible = false,
@@ -301,7 +300,36 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
             ApplyHud("FREE");
             return;
         }
-        if (_race.Armed && !TryStart(delta, s)) return;   // holding at the start line
+        if (_race.Armed)
+        {
+            float dt0 = (float)delta;
+            _armSettle += dt0;
+
+            // rest on the launch pad: tip it with the sticks (controllable up to ~90 deg) and it falls
+            // back to level when you release.
+            _fm.StepGround(s.Roll, s.Pitch, s.Yaw, s.Throttle, dt0, _padRestY);
+            ApplyTransform(_fm.Pos, _fm.Rot);
+
+            // leave the pad + start the clock: rise clear of it (throttle up), OR lean past 90 deg
+            // (up-vector below horizontal) so an over-lean falls forward instead of flipping.
+            float upY = NVec.Transform(NVec.UnitY, _fm.Rot).Y;
+            if (_armSettle >= 0.4f && (_fm.Pos.Y > _padRestY + 0.05f || upY < 0f))
+            {
+                _startPad.Visible = false;
+                _race.Launch();
+                _recorder.BeginLap();
+            }
+
+            if (_race.Armed)
+            {
+                _curThrottle = s.Throttle;
+                _recorder.HideGhost();
+                DriveAudio(s);
+                ApplyHud("LIVE");
+                return;
+            }
+        }
+
         StepFlight(delta, s);
         if (CheckRaceEvents(delta)) return;               // restarted this tick
         if (AutoResetIdle(delta, s)) return;              // reset after a spell of no input
@@ -320,34 +348,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         if (active) { _idleTime = 0f; return false; }
         _idleTime += (float)delta;
         if (_idleTime >= Config.AutoResetSeconds) { StartRace(); return true; }
-        return false;
-    }
-
-    // Armed at the start line: hold fixed and idle until the pilot gives input, then the clock
-    // starts. The first ~0.4s just settles the input baseline (controller axes arrive a few frames
-    // after launch, so an early baseline would misfire and let the drone drop). Returns true once
-    // the race has started (flight should run this tick), false while still holding at the line.
-    private bool TryStart(double delta, Sticks s)
-    {
-        _armSettle += (float)delta;
-        if (_armSettle < 0.4f)
-        {
-            // capture where every axis RESTS (gimbals rarely sit at exact zero), so an off-centre but
-            // steady stick doesn't count as input - only an actual move from rest launches.
-            _armThrottle = s.Throttle; _armRoll = s.Roll; _armPitch = s.Pitch; _armYaw = s.Yaw;
-        }
-        else
-        {
-            bool go = Mathf.Abs(s.Throttle - _armThrottle) > 0.10f
-                   || Mathf.Abs(s.Roll - _armRoll) > 0.12f
-                   || Mathf.Abs(s.Pitch - _armPitch) > 0.12f
-                   || Mathf.Abs(s.Yaw - _armYaw) > 0.12f;
-            if (go) { _startPad.Visible = false; _race.Launch(); _recorder.BeginLap(); return true; }   // fly away
-        }
-        // rest on the pad but let the pilot tilt the drone on the spot (pitch forward on the edge) without falling
-        _drone.GlobalBasis = (_armBasis * new Basis(Vector3.Right, -s.Pitch * 0.5f) * new Basis(Vector3.Forward, s.Roll * 0.4f)).Orthonormalized();
-        _curThrottle = s.Throttle; _audio.SetEffort(0f); _recorder.HideGhost();   // idle: no clock, no ghost
-        ApplyHud("LIVE");
         return false;
     }
 
@@ -441,15 +441,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         ApplyTransform(_fm.Pos, _fm.Rot);
         _drone.ResetPhysicsInterpolation();   // teleport: don't sweep from the old pose
 
-        _armBasis = _drone.GlobalBasis;        // level facing-out pose (armed tilt pivots from here)
-        if (_mode == GameMode.Race)            // rest on a launch pad at the start; it vanishes on takeoff
-        {
-            Vector3 padPos = pos - Vector3.Up * 0.21f - look * 0.6f;   // under the nose, nose over the front edge
-            _startPad.GlobalPosition = padPos;
-            _startPad.LookAt(padPos + look, Vector3.Up);
-            _startPad.Visible = true;
-        }
-        else _startPad.Visible = false;
+        _startPad.Visible = false;             // no visible platform
+        if (_mode == GameMode.Race) _padRestY = pos.Y;   // hold the CG here on an invisible launch pad
     }
 
     // (Re)connect each gate's pass-through trigger. Called on launch and after a track rebuild,
@@ -577,6 +570,14 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     // --- game mode (Race / Free Fly), switched from the pause menu ---
     public string GameModeName => _mode == GameMode.FreeFly ? "Free Fly" : "Race";
+
+    // Main-menu mode toggle (no respawn - Start applies it): flips the mode and persists it.
+    public void ToggleMenuMode()
+    {
+        _mode = _mode == GameMode.Race ? GameMode.FreeFly : GameMode.Race;
+        Config.LastMode = _mode == GameMode.FreeFly ? 1 : 0;
+        Config.Save();
+    }
 
     public void CycleGameMode(int dir)
     {

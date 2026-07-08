@@ -5,7 +5,7 @@ using Godot;
 // Enter). Esc raises a Cancel/Exit confirm (Left/Right + Enter) instead of quitting outright.
 public partial class MainMenu : MenuScreen
 {
-    private Button _first = null!;
+    private Button _first = null!, _modeBtn = null!;
     private VBoxContainer _buttons = null!;
     private Control _confirm = null!;
     private Button _cancelBtn = null!, _exitBtn = null!;
@@ -13,9 +13,13 @@ public partial class MainMenu : MenuScreen
 
     protected override void OnShow()
     {
+        _modeBtn.Text = ModeLabel();   // reflect the mode (may have changed in the pause menu)
         if (_confirmOpen) CloseConfirm();
         else _first.CallDeferred(Control.MethodName.GrabFocus);
     }
+
+    private string ModeLabel() => $"Mode:  {Ctrl.GameModeName}";
+    private void ToggleMode() { Ctrl.ToggleMenuMode(); _modeBtn.Text = ModeLabel(); }
 
     protected override bool WantsBack(InputEvent ev) => false;   // root screen: handled below, not by the base
 
@@ -54,6 +58,8 @@ public partial class MainMenu : MenuScreen
 
         _first = MainItem("Start", () => Ctrl.StartGame());
         _buttons.AddChild(_first);
+        _modeBtn = MainItem(ModeLabel(), ToggleMode);
+        _buttons.AddChild(_modeBtn);
         _buttons.AddChild(MainItem("Levels", () => Ctrl.OpenLevels(fromPause: false)));
         _buttons.AddChild(MainItem("Create", () => Ctrl.CreateLevel()));
         _buttons.AddChild(MainItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
