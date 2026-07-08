@@ -157,7 +157,8 @@ namespace OpenDrone
         public float ContactC = 16f;      // per-leg normal damping (lower -> more bounce)
         public float FrictionMu = 1.0f;   // per-leg Coulomb friction
         public float Inertia = 0.16f;     // angular inertia (higher -> slower tipping)
-        public float TorqueGain = 0.55f;  // motor rate-control authority (stick -> torque)
+        public float TorqueGain = 6f;     // motor rate-control gain (stick error -> torque)
+        public float MaxTorque = 3.2f;    // motor torque ceiling (so gravity can tip it -> real balancing)
         public float AngDrag = 0.5f;      // angular-rate damping
         public int GroundSubsteps = 8;    // micro-steps for stiff-contact stability
 
@@ -173,29 +174,36 @@ namespace OpenDrone
             return min;
         }
 
-        // One tick of grounded rigid-body dynamics against a flat ground at groundY: collective thrust +
-        // motor rate-control torque, plus a spring-damper normal force and capped Coulomb friction at
-        // each penetrating leg. Substepped internally for stiff-contact stability.
+        // One tick of grounded rigid-body dynamics against a flat ground at groundY. All done in the
+        // WORLD frame (contacts are world-natural), converting Omega (body frame, as the airborne model
+        // stores it) in at the start and back out at the end. Forces: gravity + collective thrust +
+        // per-leg spring-damper normal + capped Coulomb friction. Torque: saturated motor rate-control
+        // (so gravity can out-torque it and actually tip/balance the drone) + contact + angular drag.
+        // Substepped for stiff-contact stability. Scalar inertia -> the gyroscopic term is zero.
         public void StepGround(float roll, float pitch, float yaw, float throttle, float dt, float groundY)
         {
             float sub = dt / Math.Max(1, GroundSubsteps);
             float thrust = ThrustK * ThrustProxy(roll, pitch, yaw, throttle);
-            Vector3 cmd = BodyRates(roll, pitch, yaw);   // target body rates for the rate controller
+            Vector3 cmdBody = BodyRates(roll, pitch, yaw);   // commanded body rates
+            Vector3 omegaW = Rotate(Rot, Omega);             // body -> world angular velocity
 
             for (int i = 0; i < GroundSubsteps; i++)
             {
                 Vector3 up = Rotate(Rot, Vector3.UnitY);
                 Vector3 force = new Vector3(0f, -G, 0f) + up * thrust;
 
-                Vector3 omegaBody = Rotate(Rot, Omega, inverse: true);
-                Vector3 torque = Rotate(Rot, (cmd - omegaBody) * TorqueGain);   // motors drive toward cmd rate
+                // motor rate control toward the commanded rate, limited by the motor torque ceiling
+                Vector3 ctrl = (Rotate(Rot, cmdBody) - omegaW) * TorqueGain;
+                float cm = ctrl.Length();
+                if (cm > MaxTorque) ctrl *= MaxTorque / cm;
+                Vector3 torque = ctrl;
 
                 foreach (Vector3 lo in Legs)
                 {
                     Vector3 r = Rotate(Rot, lo);
                     float pen = groundY - (Pos.Y + r.Y);
                     if (pen <= 0f) continue;
-                    Vector3 legVel = Vel + Vector3.Cross(Omega, r);
+                    Vector3 legVel = Vel + Vector3.Cross(omegaW, r);
                     float n = MathF.Max(0f, ContactK * pen - ContactC * legVel.Y);
                     var vt = new Vector3(legVel.X, 0f, legVel.Z);
                     float vm = vt.Length();
@@ -203,16 +211,31 @@ namespace OpenDrone
                     Vector3 fr = vm > 1e-4f ? -MathF.Min(FrictionMu * n, vm / sub) * (vt / vm) : Vector3.Zero;
                     var fc = new Vector3(fr.X, n, fr.Z);
                     force += fc;
-                    torque += Vector3.Cross(r, fc);
+                    torque += Vector3.Cross(r, fc);   // r, fc both world
                 }
 
-                torque -= AngDrag * Omega;
+                torque -= AngDrag * omegaW;
 
                 Vel += force * sub;
-                Omega += torque / MathF.Max(Inertia, 1e-4f) * sub;
+                omegaW += torque / MathF.Max(Inertia, 1e-4f) * sub;
                 Pos += Vel * sub;
-                Rot = IntegrateQuat(Rot, Omega, sub);
+                Rot = IntegrateQuatWorld(Rot, omegaW, sub);
             }
+
+            Omega = Rotate(Rot, omegaW, inverse: true);   // back to body frame for the airborne model
+        }
+
+        // World-frame quaternion integration (dq * q, left-multiply) - the counterpart to the body-frame
+        // IntegrateQuat (q * dq) used by the airborne model.
+        private static Quaternion IntegrateQuatWorld(Quaternion q, Vector3 omegaWorld, float dt)
+        {
+            float w = omegaWorld.Length();
+            if (w < 1e-9f) return Quaternion.Normalize(q);
+            float ang = w * dt;
+            Vector3 axis = omegaWorld / w;
+            float s = MathF.Sin(ang * 0.5f);
+            var dq = new Quaternion(axis.X * s, axis.Y * s, axis.Z * s, MathF.Cos(ang * 0.5f));
+            return Quaternion.Normalize(dq * q);
         }
     }
 }

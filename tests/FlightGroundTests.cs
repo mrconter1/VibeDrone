@@ -54,6 +54,25 @@ public class FlightGroundTests
     }
 
     [Fact]
+    public void Tilted_drop_settles_grounded_and_finite()
+    {
+        var fm = new FlightModel();
+        fm.Reset();
+        fm.Pos = new Vector3(0f, 0.6f, 0f);
+        fm.Rot = Quaternion.CreateFromAxisAngle(Vector3.UnitX, 0.35f);   // ~20 deg pitch
+        fm.Vel = Vector3.Zero;
+        fm.Omega = Vector3.Zero;
+        for (int i = 0; i < 1000; i++)   // 4 s, gentle throttle (below hover)
+        {
+            if (fm.LowestLeg() <= 0.03f) fm.StepGround(0f, 0f, 0f, 0.15f, 0.004f, 0f);
+            else fm.Step(0f, 0f, 0f, 0.15f, 0.004f);
+        }
+        Assert.False(float.IsNaN(fm.Pos.Y) || float.IsInfinity(fm.Pos.Y));
+        Assert.InRange(fm.Pos.Y, -0.2f, 0.5f);   // settled near the ground, not launched/sunk
+        Assert.True(fm.Vel.Length() < 1.0f, $"still moving: {fm.Vel.Length()}");
+    }
+
+    [Fact]
     public void Contact_stays_finite()
     {
         FlightModel fm = Drop(0.6f, throttle: 0.2f, ticks: 750);
