@@ -88,7 +88,24 @@ public partial class MainMenu : MenuScreen
         rows.AddChild(Ui.Divider(UiTheme.S3));
         rows.AddChild(Ui.Hints(("↑↓", "navigate"), ("←→", "mode"), ("↵", "select"), ("esc", "exit")));
 
+        BuildVersion();
         BuildConfirm();
+    }
+
+    // Build version, pinned to the bottom-right corner of the screen (baked at export by CI).
+    private void BuildVersion()
+    {
+        var overlay = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Theme = UiTheme.Get() };
+        overlay.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        AddChild(overlay);
+
+        string ver = ProjectSettings.GetSetting("application/config/version", "dev").AsString();
+        var label = UiTheme.Body("v" + ver, UiTheme.TextMuted, 13);
+        label.HorizontalAlignment = HorizontalAlignment.Right;
+        label.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+        label.OffsetLeft = -220; label.OffsetTop = -32;
+        label.OffsetRight = -18; label.OffsetBottom = -14;
+        overlay.AddChild(label);
     }
 
     private const float RowWidth = 388f;

@@ -1,0 +1,63 @@
+name: Release
+
+# Tag a version to cut a release, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+# This builds the Godot .NET (C#) project, exports the Windows desktop build, and publishes it as a
+# GitHub Release with the packaged .zip attached. The tag (minus the leading "v") is stamped into
+# project.godot so it shows up in the main-menu version label.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: 4.3.0
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Godot (.NET) + export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ env.GODOT_VERSION }}
+          use-dotnet: true
+          include-templates: true
+
+      - name: Stamp version from tag
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          sed -i "s|^config/version=.*|config/version=\"$VER\"|" godot/project.godot
+          echo "Stamped version: $VER"
+
+      - name: Import project (build resource cache)
+        shell: bash
+        run: godot --headless --path godot --import || true
+
+      - name: Export Windows build
+        shell: bash
+        run: |
+          mkdir -p build
+          godot --headless --path godot --export-release "Windows Desktop"
+
+      - name: Package
+        shell: bash
+        run: 7z a "OpenDrone-${GITHUB_REF_NAME}-windows.zip" ./build/*
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: OpenDrone-*-windows.zip
+          generate_release_notes: true
