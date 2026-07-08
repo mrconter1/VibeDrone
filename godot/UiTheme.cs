@@ -13,8 +13,20 @@ public static class UiTheme
     public static readonly Color Border  = new(1f, 1f, 1f, 0.07f);            // hairline
     public static readonly Color Text     = new(0.90f, 0.93f, 0.96f);
     public static readonly Color TextDim  = new(0.90f, 0.93f, 0.96f, 0.42f);
+    public static readonly Color TextMuted = new(0.90f, 0.93f, 0.96f, 0.26f);  // section labels / faint
     public static readonly Color Accent   = new(0.24f, 0.80f, 0.96f);         // cyan
     public static readonly Color Good     = new(0.60f, 0.98f, 0.64f);         // best/records (used sparingly)
+
+    // --- component library tokens (Ui.cs / MenuRow / UiIcons build from these) ---
+    public static readonly Color Card      = new(0.055f, 0.065f, 0.085f, 0.94f);  // menu card fill
+    public static readonly Color CardBorder = new(1f, 1f, 1f, 0.08f);             // card hairline
+    public static readonly Color RowHover  = new(1f, 1f, 1f, 0.05f);              // row hover fill (x focus t)
+    public static readonly Color RowFocus  = new(Accent.R, Accent.G, Accent.B, 0.16f);  // selected row fill
+
+    // spacing scale (px)
+    public const int S1 = 4, S2 = 8, S3 = 12, S4 = 16, S5 = 20, S6 = 24, S8 = 36;
+    // corner radii
+    public const int RadSm = 8, RadMd = 12, RadLg = 18;
 
     private static Theme _theme = null!;
     private static SystemFont _title = null!, _body = null!;

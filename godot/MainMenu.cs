@@ -1,32 +1,42 @@
+using System;
 using Godot;
 
-// The title screen: the VibeDrone logo + Start / Levels / Create / Settings / Exit, over the blurred
-// orbiting arena. Shown at launch and reachable from the pause menu. Keyboard-navigable (up/down +
-// Enter). Esc raises a Cancel/Exit confirm (Left/Right + Enter) instead of quitting outright.
+// The title screen, rebuilt on the Ui component library: the VibeDrone logo + subtitle over the
+// blurred orbiting arena, then a floating card of icon rows - Start / Mode toggle / Levels / Create /
+// Settings / Exit (play-first, quit-last) - and a footer key-hint bar. Esc raises a Yes/No exit
+// confirm; R hot-reloads under the debug build. Keyboard-navigable (up/down + Enter).
 public partial class MainMenu : MenuScreen
 {
-    private Button _first = null!, _modeBtn = null!;
-    private VBoxContainer _buttons = null!;
+    private static readonly string[] ModeOptions = { "Race", "Free Fly" };
+
+    private MenuRow _first = null!;
+    private Segmented _mode = null!;
+    private VBoxContainer _rows = null!;
+    private PanelContainer _card = null!;
     private Control _confirm = null!;
     private Button _cancelBtn = null!, _exitBtn = null!;
     private bool _confirmOpen;
 
     protected override void OnShow()
     {
-        _modeBtn.Text = ModeLabel();   // reflect the mode (may have changed in the pause menu)
+        _mode.SetIndex(Array.IndexOf(ModeOptions, Ctrl.GameModeName));
         if (_confirmOpen) CloseConfirm();
-        else _first.CallDeferred(Control.MethodName.GrabFocus);
+        else { _first.CallDeferred(Control.MethodName.GrabFocus); FadeIn(); }
     }
 
-    private string ModeLabel() => $"Mode:  {Ctrl.GameModeName}";
-    private void ToggleMode() { Ctrl.ToggleMenuMode(); _modeBtn.Text = ModeLabel(); }
+    // Drive the menu-mode toggle to match the segmented selection (no respawn; persists LastMode).
+    private void ApplyMode(int index)
+    {
+        string want = ModeOptions[index];
+        for (int guard = 0; Ctrl.GameModeName != want && guard < ModeOptions.Length; guard++)
+            Ctrl.ToggleMenuMode();
+    }
 
     protected override bool WantsBack(InputEvent ev) => false;   // root screen: handled below, not by the base
-
     protected override void Back() { }
 
-    // Esc raises / dismisses the exit confirm; R hot-reloads (under StartDebug). Enter and Left/Right
-    // are left to the focused buttons (so Enter selects the highlighted confirm option).
+    // Esc raises / dismisses the exit confirm; R hot-reloads. Enter and Left/Right are left to the
+    // focused rows (so Enter selects the highlighted confirm option, Left/Right drive the Mode row).
     public override void _Input(InputEvent ev)
     {
         if (!Visible || ev is not InputEventKey { Pressed: true } k) return;
@@ -42,51 +52,61 @@ public partial class MainMenu : MenuScreen
         }
     }
 
+    private void FadeIn()
+    {
+        _card.Modulate = new Color(1, 1, 1, 0);
+        _card.CreateTween().SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic)
+            .TweenProperty(_card, "modulate:a", 1f, 0.16);
+    }
+
     protected override void Build()
     {
-        VBoxContainer v = CenteredBox(out _);
+        VBoxContainer v = CenteredBox(out _, sep: 0);
 
         v.AddChild(new LogoCanvas { Style = 0, CustomMinimumSize = new Vector2(620, 130) });   // VibeDrone divider logo
         var sub = UiTheme.Body("R E A L I S T I C   F P V   S I M", UiTheme.TextDim, 22);
         sub.HorizontalAlignment = HorizontalAlignment.Center;
         v.AddChild(sub);
-        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, 34) });   // spacer
+        v.AddChild(new Control { CustomMinimumSize = new Vector2(0, UiTheme.S6) });   // spacer
 
-        _buttons = new VBoxContainer();
-        _buttons.AddThemeConstantOverride("separation", 10);
-        v.AddChild(_buttons);
+        VBoxContainer rows = Ui.Card(out _card);
+        _card.CustomMinimumSize = new Vector2(440, 0);
+        _card.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        _rows = rows;
+        v.AddChild(_card);
 
-        _first = MainItem("Start", () => Ctrl.StartGame());
-        _buttons.AddChild(_first);
-        _modeBtn = MainItem(ModeLabel(), ToggleMode);
-        _buttons.AddChild(_modeBtn);
-        _buttons.AddChild(MainItem("Levels", () => Ctrl.OpenLevels(fromPause: false)));
-        _buttons.AddChild(MainItem("Create", () => Ctrl.CreateLevel()));
-        _buttons.AddChild(MainItem("Settings", () => Ctrl.OpenSettings(fromPause: false)));
-        _buttons.AddChild(MainItem("Exit", OpenConfirm));
+        _first = Row("play", "Start", () => Ctrl.StartGame());
+        rows.AddChild(_first);
+        _mode = new Segmented("mode", "Mode", ModeOptions,
+            Array.IndexOf(ModeOptions, Ctrl.GameModeName), ApplyMode, RowWidth);
+        rows.AddChild(_mode);
+        rows.AddChild(Row("levels", "Levels", () => Ctrl.OpenLevels(fromPause: false)));
+        rows.AddChild(Row("create", "Create", () => Ctrl.CreateLevel()));
+        rows.AddChild(Row("settings", "Settings", () => Ctrl.OpenSettings(fromPause: false)));
+        rows.AddChild(Row("exit", "Exit", OpenConfirm));
+
+        rows.AddChild(Ui.Divider(UiTheme.S3));
+        rows.AddChild(Ui.Hints(("↑↓", "navigate"), ("←→", "mode"), ("↵", "select"), ("esc", "exit")));
 
         BuildConfirm();
     }
 
-    private const float MenuWidth = 440f;
+    private const float RowWidth = 388f;
 
-    // A title-menu item: a wide pill centered on screen (ShrinkCenter), with the label left-aligned.
-    private Button MainItem(string text, System.Action onPressed)
+    private MenuRow Row(string glyph, string text, Action onPressed)
     {
-        Button b = UiTheme.MenuItem(text, onPressed, MenuWidth);
-        b.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
-        b.Alignment = HorizontalAlignment.Center;   // centered text: the convention for a standalone title menu
-        return b;
+        var r = new MenuRow(glyph, text, RowWidth, onPressed);
+        r.SizeFlagsHorizontal = Control.SizeFlags.Fill;
+        return r;
     }
 
-    // A modal "Exit VibeDrone?" card that floats over the dimmed title screen, with Cancel / Exit.
+    // A modal "Exit VibeDrone?" card that floats over the dimmed title screen, with No / Yes.
     private void BuildConfirm()
     {
         _confirm = new Control { Theme = UiTheme.Get(), Visible = false };
         _confirm.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_confirm);
 
-        // dim the whole title screen behind the card so it clearly sits on top of the menu
         var dim = new ColorRect { Color = new Color(0.01f, 0.015f, 0.02f, 0.66f), MouseFilter = Control.MouseFilterEnum.Stop };
         dim.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _confirm.AddChild(dim);
@@ -95,8 +115,6 @@ public partial class MainMenu : MenuScreen
         center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _confirm.AddChild(center);
 
-        // a solid floating card (opaque, hairline border, soft drop shadow) - reads clearly over the
-        // dimmed menu rather than the theme's near-transparent frosted panel.
         var card = new StyleBoxFlat { BgColor = new Color(0.10f, 0.115f, 0.14f) };
         card.SetCornerRadiusAll(16);
         card.CornerDetail = 8;
@@ -139,23 +157,23 @@ public partial class MainMenu : MenuScreen
         row.AddChild(_cancelBtn);
         row.AddChild(_exitBtn);
 
-        // Left/Right move between the two options; Enter activates the focused one.
         _cancelBtn.FocusNeighborRight = _cancelBtn.GetPathTo(_exitBtn);
         _exitBtn.FocusNeighborLeft = _exitBtn.GetPathTo(_cancelBtn);
     }
 
-    private static Button ConfirmButton(string text, System.Action onPressed)
+    private static Button ConfirmButton(string text, Action onPressed)
     {
         Button b = UiTheme.MenuItem(text, onPressed, 170f);
         b.Alignment = HorizontalAlignment.Center;
         return b;
     }
 
-    // Keep the title menu visible behind the card, but drop its buttons out of keyboard focus.
+    // Keep the title menu visible behind the card, but drop its rows out of keyboard focus.
     private void SetMenuFocusable(bool on)
     {
-        foreach (Node child in _buttons.GetChildren())
-            if (child is Button b) b.FocusMode = on ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
+        var fm = on ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
+        foreach (Node child in _rows.GetChildren())
+            if (child is Control c and (MenuRow or Segmented)) c.FocusMode = fm;
     }
 
     private void OpenConfirm()

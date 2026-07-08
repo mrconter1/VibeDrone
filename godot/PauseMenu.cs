@@ -1,62 +1,92 @@
+using System;
 using Godot;
 
-// In-game pause menu, grouped: play actions (resume / restart / mode), navigation (levels / watch /
-// settings / controls), then leave (main menu / exit). The Mode row switches Race <-> Free Fly with
-// Left/Right (or Enter). Esc/Space/Backspace resume. Navigation routes through DroneController.
+// In-game pause menu, rebuilt on the Ui component library: a floating card with a header + context
+// line (track / best lap), three labelled groups of icon rows - PLAY (resume / restart / mode
+// toggle), OPTIONS (levels / watch / settings / controls), LEAVE (main menu / exit) - and a footer
+// key-hint bar. Resume is pre-selected. Order follows the resume-first / quit-last convention.
 public partial class PauseMenu : MenuScreen
 {
-    private Button _first = null!, _modeBtn = null!;
+    private static readonly string[] ModeOptions = { "Race", "Free Fly" };
+
+    private Button _first = null!;
+    private Segmented _mode = null!;
+    private PanelContainer _card = null!;
+    private Label _context = null!;
 
     protected override void OnShow()
     {
-        _modeBtn.Text = ModeLabel();
+        _context.Text = ContextLine();
+        _mode.SetIndex(Array.IndexOf(ModeOptions, Ctrl.GameModeName));
         _first.CallDeferred(Control.MethodName.GrabFocus);
+        FadeIn();
     }
 
     protected override void Back() => Ctrl.ResumeGame();
 
-    // Left/Right switch game mode while the Mode row is focused; everything else falls through to the
-    // base (which handles the back keys).
-    public override void _Input(InputEvent ev)
+    private string ContextLine()
     {
-        if (Visible && _modeBtn.HasFocus() && ev is InputEventKey { Pressed: true } k
-            && k.Keycode is Key.Left or Key.Right)
-        {
-            Ctrl.CycleGameMode(k.Keycode == Key.Right ? 1 : -1);
-            _modeBtn.Text = ModeLabel();
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-        base._Input(ev);
+        float best = Ctrl.BestLapAt(Ctrl.LevelIndex);
+        string time = best > 0f ? $"best {Format.Time(best)}" : "no times yet";
+        return $"{Ctrl.LevelName}     ·     {time}";
     }
 
-    private string ModeLabel() => $"‹  Mode:  {Ctrl.GameModeName}  ›";
+    // Drive the game mode to match the segmented selection (order-agnostic: cycle until it matches).
+    private void ApplyMode(int index)
+    {
+        string want = ModeOptions[index];
+        for (int guard = 0; Ctrl.GameModeName != want && guard < ModeOptions.Length; guard++)
+            Ctrl.CycleGameMode(1);
+    }
+
+    private void FadeIn()
+    {
+        _card.Modulate = new Color(1, 1, 1, 0);
+        _card.CreateTween().SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic)
+            .TweenProperty(_card, "modulate:a", 1f, 0.16);
+    }
 
     protected override void Build()
     {
-        VBoxContainer v = CenteredPanel(Vector2.Zero, pad: 28, sep: 8);
+        VBoxContainer outer = CenteredBox(out _, sep: 0);
 
-        v.AddChild(UiTheme.Title("PAUSED", 38));
-        v.AddChild(new HSeparator());
+        VBoxContainer v = Ui.Card(out _card);
+        _card.CustomMinimumSize = new Vector2(440, 0);
+        outer.AddChild(_card);
 
-        _first = UiTheme.MenuItem("Resume", () => Ctrl.ResumeGame(), 320f);
+        var head = Ui.Header("PAUSED", null);
+        _context = UiTheme.Body(ContextLine(), UiTheme.TextDim, 15);
+        head.AddChild(_context);
+        v.AddChild(head);
+
+        v.AddChild(Ui.SectionRow("Play"));
+        _first = Row("play", "Resume", () => Ctrl.ResumeGame());
         v.AddChild(_first);
-        v.AddChild(UiTheme.MenuItem("Restart", () => Ctrl.RestartRace(), 320f));
+        v.AddChild(Row("restart", "Restart", () => Ctrl.RestartRace()));
+        _mode = new Segmented("mode", "Mode", ModeOptions,
+            Array.IndexOf(ModeOptions, Ctrl.GameModeName), ApplyMode, RowWidth);
+        v.AddChild(_mode);
 
-        _modeBtn = UiTheme.MenuItem(ModeLabel(), () => { Ctrl.CycleGameMode(1); _modeBtn.Text = ModeLabel(); }, 320f);
-        _modeBtn.Alignment = HorizontalAlignment.Center;
-        v.AddChild(_modeBtn);
+        v.AddChild(Ui.SectionRow("Options"));
+        v.AddChild(Row("levels", "Levels", () => Ctrl.OpenLevels(fromPause: true)));
+        v.AddChild(Row("watch", "Watch best lap", () => Ctrl.WatchBest(Ctrl.LevelIndex)));
+        v.AddChild(Row("settings", "Settings", () => Ctrl.OpenSettings(fromPause: true)));
+        v.AddChild(Row("controls", "Controls", () => Ctrl.OpenHelp()));
 
-        v.AddChild(new HSeparator());
-        v.AddChild(UiTheme.MenuItem("Levels", () => Ctrl.OpenLevels(fromPause: true), 320f));
-        v.AddChild(UiTheme.MenuItem("Watch best lap", () => Ctrl.WatchBest(Ctrl.LevelIndex), 320f));
-        v.AddChild(UiTheme.MenuItem("Settings", () => Ctrl.OpenSettings(fromPause: true), 320f));
-        v.AddChild(UiTheme.MenuItem("Controls", () => Ctrl.OpenHelp(), 320f));
+        v.AddChild(Ui.SectionRow("Leave"));
+        v.AddChild(Row("home", "Main menu", () => Ctrl.OpenMain()));
+        v.AddChild(Row("exit", "Exit game", () => GetTree().Quit()));
 
-        v.AddChild(new HSeparator());
-        v.AddChild(UiTheme.MenuItem("Main menu", () => Ctrl.OpenMain(), 320f));
-        v.AddChild(UiTheme.MenuItem("Exit game", () => GetTree().Quit(), 320f));
+        v.AddChild(Ui.Divider(UiTheme.S3));
+        v.AddChild(Ui.Hints(("↑↓", "navigate"), ("←→", "mode"), ("↵", "select"), ("esc", "resume")));
+    }
 
-        v.AddChild(UiTheme.Body("‹ ›  switch mode on the Mode row", UiTheme.TextDim, 13));
+    private const float RowWidth = 388f;
+
+    private MenuRow Row(string glyph, string text, Action onPressed)
+    {
+        var r = new MenuRow(glyph, text, RowWidth, onPressed);
+        r.SizeFlagsHorizontal = Control.SizeFlags.Fill;
+        return r;
     }
 }
