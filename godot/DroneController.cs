@@ -38,7 +38,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
 
     // lap timing state
     private readonly RaceState _race = new();   // armed/running/lap-time/gate-progress/miss tracking
-    private float _armThrottle;    // throttle baseline (settles over the first moments)
+    private float _armThrottle;    // resting input baseline (settles over the first moments)
+    private float _armRoll, _armPitch, _armYaw;
     private float _armSettle;      // time armed; input is ignored until it settles
     private bool _gateHit;         // drone touched a gate bar this frame
     private bool _showDebug;       // FPS/FOV/etc overlay (off by default, toggled from the Esc menu)
@@ -331,13 +332,17 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _armSettle += (float)delta;
         if (_armSettle < 0.4f)
         {
-            _armThrottle = s.Throttle;   // keep tracking the resting value while it settles
+            // capture where every axis RESTS (gimbals rarely sit at exact zero), so an off-centre but
+            // steady stick doesn't count as input - only an actual move from rest launches.
+            _armThrottle = s.Throttle; _armRoll = s.Roll; _armPitch = s.Pitch; _armYaw = s.Yaw;
         }
         else
         {
-            bool go = Mathf.Abs(s.Throttle - _armThrottle) > 0.08f
-                   || Mathf.Abs(s.Roll) > 0.06f || Mathf.Abs(s.Pitch) > 0.06f || Mathf.Abs(s.Yaw) > 0.06f;
-            if (go) { _startPad.Visible = false; _race.Launch(); _recorder.BeginLap(); return true; }   // fly away: pad gone
+            bool go = Mathf.Abs(s.Throttle - _armThrottle) > 0.10f
+                   || Mathf.Abs(s.Roll - _armRoll) > 0.12f
+                   || Mathf.Abs(s.Pitch - _armPitch) > 0.12f
+                   || Mathf.Abs(s.Yaw - _armYaw) > 0.12f;
+            if (go) { _startPad.Visible = false; _race.Launch(); _recorder.BeginLap(); return true; }   // fly away
         }
         // rest on the pad but let the pilot tilt the drone on the spot (pitch forward on the edge) without falling
         _drone.GlobalBasis = (_armBasis * new Basis(Vector3.Right, -s.Pitch * 0.5f) * new Basis(Vector3.Forward, s.Roll * 0.4f)).Orthonormalized();
