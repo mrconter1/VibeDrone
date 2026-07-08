@@ -92,11 +92,8 @@ public partial class MainMenu : MenuScreen
         BuildConfirm();
     }
 
-    private string _updateUrl = "";
-    private Button _updateBtn = null!;
-
-    // Build version pinned to the bottom-right corner (baked at export by CI), plus a hidden
-    // "update available" button just above it that a background check reveals if a newer release exists.
+    // Build version, pinned to the bottom-right corner (baked at export by CI). Updates are handled by
+    // the external launcher, so the game only shows which build this is.
     private void BuildVersion()
     {
         var overlay = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Theme = UiTheme.Get() };
@@ -110,28 +107,6 @@ public partial class MainMenu : MenuScreen
         label.OffsetLeft = -220; label.OffsetTop = -32;
         label.OffsetRight = -18; label.OffsetBottom = -14;
         overlay.AddChild(label);
-
-        _updateBtn = new Button { Flat = true, Visible = false, FocusMode = Control.FocusModeEnum.None };
-        _updateBtn.AddThemeFontSizeOverride("font_size", 14);
-        _updateBtn.AddThemeColorOverride("font_color", UiTheme.Accent);
-        _updateBtn.AddThemeColorOverride("font_hover_color", UiTheme.Text);
-        _updateBtn.Alignment = HorizontalAlignment.Right;
-        _updateBtn.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
-        _updateBtn.OffsetLeft = -260; _updateBtn.OffsetTop = -58;
-        _updateBtn.OffsetRight = -14; _updateBtn.OffsetBottom = -32;
-        _updateBtn.Pressed += () => { if (_updateUrl.Length > 0) OS.ShellOpen(_updateUrl); };
-        overlay.AddChild(_updateBtn);
-
-        var checker = new UpdateChecker();
-        AddChild(checker);
-        checker.Check(ver, OnUpdateAvailable);
-    }
-
-    private void OnUpdateAvailable(string tag, string url)
-    {
-        _updateUrl = url;
-        _updateBtn.Text = "⬆  Update to " + tag;
-        _updateBtn.Visible = true;
     }
 
     private const float RowWidth = 388f;

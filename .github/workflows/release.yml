@@ -2,9 +2,10 @@ name: Release
 
 # Tag a version to cut a release, e.g.:
 #   git tag v0.1.0 && git push origin v0.1.0
-# This builds the Godot .NET (C#) project, exports the Windows desktop build, and publishes it as a
-# GitHub Release with the packaged .zip attached. The tag (minus the leading "v") is stamped into
-# project.godot so it shows up in the main-menu version label.
+# Builds the Godot .NET game (exported as a portable zip), publishes the Avalonia launcher, wraps the
+# launcher in an Inno Setup installer, and attaches both to a GitHub Release. The tag (minus "v") is
+# stamped into project.godot for the in-game version label. The launcher downloads/updates the game
+# from the release zip on the user's machine.
 
 on:
   push:
@@ -52,41 +53,19 @@ jobs:
           mkdir -p build
           godot --headless --path godot --export-release "Windows Desktop"
 
-      - name: Package portable zip
+      - name: Package portable game zip
         shell: bash
         run: 7z a "OpenDrone-${GITHUB_REF_NAME}-windows.zip" ./build/*
+
+      - name: Publish launcher (self-contained)
+        shell: bash
+        run: dotnet publish launcher/VibeDroneLauncher.csproj -c Release -o launcher/publish
 
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: diag - iscc at Program Files (x86)
-        if: always()
-        shell: bash
-        run: test -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
-
-      - name: diag - iscc on PATH
-        if: always()
-        shell: bash
-        run: command -v iscc
-
-      - name: diag - build dir present
-        if: always()
-        shell: bash
-        run: test -d build && ls build
-
-      - name: diag - compile (verbose, non-fatal)
-        if: always()
-        shell: bash
-        run: |
-          VER="${GITHUB_REF_NAME#v}"
-          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
-          [ -f "$ISCC" ] || ISCC="iscc"
-          ROOT="$(pwd -W 2>/dev/null || pwd)"
-          echo "ISCC=$ISCC  ROOT=$ROOT"
-          "$ISCC" "/DMyAppVersion=$VER" "/DSrcDir=$ROOT" installer/OpenDrone.iss || echo "ISCC_EXIT=$?"
-
-      - name: Build installer
+      - name: Build launcher installer
         shell: bash
         run: |
           set -e
@@ -100,7 +79,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          # Installer (launcher, auto-updates the game) + portable game zip (the launcher's update feed).
           files: |
+            installer_out/VibeDrone-Setup-*.exe
             OpenDrone-*-windows.zip
-            installer_out/OpenDrone-Setup-*.exe
           generate_release_notes: true

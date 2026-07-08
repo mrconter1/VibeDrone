@@ -23,3 +23,12 @@ build/
 # test project build output
 tests/bin/
 tests/obj/
+
+# launcher build output
+launcher/bin/
+launcher/obj/
+launcher/publish/
+launcher/publish_test/
+
+# installer output
+installer_out/

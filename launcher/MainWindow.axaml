@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VibeDroneLauncher.MainWindow"
+        Width="780" Height="520" CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        RequestedThemeVariant="Dark"
+        Background="#08090c"
+        Title="VibeDrone Launcher">
+
+  <Window.Styles>
+    <!-- primary action button: cyan pill, matches the game's accent -->
+    <Style Selector="Button.action">
+      <Setter Property="Background" Value="#3dccf5"/>
+      <Setter Property="Foreground" Value="#04121a"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Height" Value="48"/>
+      <Setter Property="MinWidth" Value="190"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.action:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#5ad6f7"/>
+      <Setter Property="Foreground" Value="#04121a"/>
+    </Style>
+    <Style Selector="Button.action:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="#22303a"/>
+      <Setter Property="Foreground" Value="#6b7883"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="30" RowDefinitions="Auto,*,Auto">
+
+    <!-- header -->
+    <StackPanel Grid.Row="0" Spacing="2">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Text="VIBE" FontSize="42" FontWeight="Bold" Foreground="#e6edf3"/>
+        <TextBlock Text="DRONE" FontSize="42" FontWeight="Bold" Foreground="#3dccf5"/>
+      </StackPanel>
+      <TextBlock x:Name="VersionLine" FontSize="13" Foreground="#8b98a5" Margin="2,4,0,0"/>
+    </StackPanel>
+
+    <!-- what's new -->
+    <Border Grid.Row="1" Margin="0,20" CornerRadius="16"
+            Background="#0e1116" BorderBrush="#1c222b" BorderThickness="1">
+      <Grid RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Text="WHAT'S NEW" Margin="20,16,0,0"
+                   FontSize="12" FontWeight="SemiBold" Foreground="#5b6673"/>
+        <ScrollViewer Grid.Row="1" Margin="20,10,12,16" VerticalScrollBarVisibility="Auto">
+          <TextBlock x:Name="Notes" TextWrapping="Wrap" Foreground="#c9d3dd"
+                     FontSize="14" LineHeight="21"/>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+
+    <!-- footer: progress + status + action -->
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+      <ProgressBar x:Name="Progress" Grid.Row="0" Grid.ColumnSpan="2" Height="6"
+                   Margin="0,0,0,14" IsVisible="False" Minimum="0" Maximum="100"
+                   Foreground="#3dccf5" Background="#1a1f27" CornerRadius="3"/>
+      <TextBlock x:Name="Status" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
+                 Foreground="#8b98a5" FontSize="13"/>
+      <Button x:Name="ActionBtn" Grid.Row="1" Grid.Column="1" Classes="action"
+              Content="Play" Click="OnAction"/>
+    </Grid>
+  </Grid>
+</Window>

@@ -1,8 +1,8 @@
-; Inno Setup script for the VibeDrone (OpenDrone) Windows installer.
+; Inno Setup script for the VibeDrone launcher installer.
 ; Compiled in CI with:
 ;   ISCC.exe /DMyAppVersion=X.Y.Z /DSrcDir=<repo-root> installer\OpenDrone.iss
-; SrcDir is an absolute path to the repo root so build\, godot\icon.ico and the output
-; folder all resolve regardless of the compiler's working directory.
+; It installs the Avalonia launcher (launcher\publish) into Program Files and points the shortcuts at
+; it. The launcher itself downloads/updates the game into %LocalAppData%\VibeDrone\app on first run.
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
@@ -11,7 +11,7 @@
   #define SrcDir "."
 #endif
 #define MyAppName "VibeDrone"
-#define MyAppExeName "OpenDrone.exe"
+#define MyAppExe "VibeDroneLauncher.exe"
 #define MyAppPublisher "mrconter1"
 #define MyAppUrl "https://github.com/mrconter1/VibeDrone"
 
@@ -26,10 +26,9 @@ AppUpdatesURL={#MyAppUrl}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\{#MyAppExe}
 OutputDir={#SrcDir}\installer_out
-OutputBaseFilename=OpenDrone-Setup-v{#MyAppVersion}
-SetupIconFile={#SrcDir}\godot\icon.ico
+OutputBaseFilename=VibeDrone-Setup-v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -41,12 +40,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "{#SrcDir}\build\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#SrcDir}\launcher\publish\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
