@@ -63,8 +63,14 @@ jobs:
       - name: Build installer
         shell: bash
         run: |
+          set -e
           VER="${GITHUB_REF_NAME#v}"
-          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppVersion=$VER" installer/OpenDrone.iss
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          [ -f "$ISCC" ] || ISCC="iscc"
+          ROOT="$(pwd -W 2>/dev/null || pwd)"
+          echo "ISCC=$ISCC  ROOT=$ROOT"
+          "$ISCC" "/DMyAppVersion=$VER" "/DSrcDir=$ROOT" installer/OpenDrone.iss
+          ls -la installer_out
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

@@ -1,9 +1,14 @@
 ; Inno Setup script for the VibeDrone (OpenDrone) Windows installer.
-; Compiled in CI with:  ISCC.exe /DMyAppVersion=X.Y.Z installer\OpenDrone.iss
-; Paths are relative to the repo root (SourceDir below), so it reads the exported build\ folder.
+; Compiled in CI with:
+;   ISCC.exe /DMyAppVersion=X.Y.Z /DSrcDir=<repo-root> installer\OpenDrone.iss
+; SrcDir is an absolute path to the repo root so build\, godot\icon.ico and the output
+; folder all resolve regardless of the compiler's working directory.
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
+#endif
+#ifndef SrcDir
+  #define SrcDir "."
 #endif
 #define MyAppName "VibeDrone"
 #define MyAppExeName "OpenDrone.exe"
@@ -11,7 +16,6 @@
 #define MyAppUrl "https://github.com/mrconter1/VibeDrone"
 
 [Setup]
-SourceDir=..
 AppId={{4C2B6F1E-9A3D-4E77-A1B2-0D9E5C7A11F0}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -23,14 +27,12 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
-OutputDir=installer_out
+OutputDir={#SrcDir}\installer_out
 OutputBaseFilename=OpenDrone-Setup-v{#MyAppVersion}
-SetupIconFile=godot\icon.ico
+SetupIconFile={#SrcDir}\godot\icon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -39,7 +41,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "build\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#SrcDir}\build\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
