@@ -1,9 +1,9 @@
 # OpenDrone - Godot 4 (C#) sim
 
-FPV drone sim driven by the flight model fitted from the reference sim flight logs.
-The physics is `FlightModel.cs` - a pure C# (`System.Numerics`) port of
-`../python/the model module`. `DroneController.cs` runs it each physics tick and
-applies the transform (Godot's RigidBody is NOT used - the model is authoritative).
+FPV drone sim driven by a custom grey-box flight model. The physics is
+`FlightModel.cs` - a pure C# (`System.Numerics`) module. `DroneController.cs` runs it
+each physics tick and applies the transform (Godot's RigidBody is NOT used - the model
+is authoritative).
 
 ## Run / edit
 1. Install **Godot 4.x .NET edition** (the C# build) and the **.NET 8 SDK**.
@@ -21,11 +21,9 @@ bundled, so end users just double-click one file. (Same flow targets a **Web**
 build later for a zero-install browser version.)
 
 ## Updating the model
-Re-fit in Python and copy the numbers from `logs/the parameter set` into the fields at
-the top of `FlightModel.cs` (or load the JSON at runtime). Keep `FlightModel.cs`
-in sync with `python/the model module` - they are the same model.
+The model's constants live at the top of `FlightModel.cs` - tune them there.
 
 ## Coordinate note
-The model uses the reference sim's convention (Y up, +Z forward). Godot is right-handed
-with -Z forward, so a stick direction or the camera yaw may need a sign flip -
-that's what the `Sign*` exports and the camera's 180 yaw handle.
+The model uses a Y-up, +Z-forward convention. Godot is right-handed with -Z forward, so
+a stick direction or the camera yaw may need a sign flip - that's what the `Sign*`
+exports and the camera's 180 yaw handle.

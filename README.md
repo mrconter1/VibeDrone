@@ -1,12 +1,11 @@
 # OpenDrone
 
-An FPV drone flight game (Godot 4 + C#) whose flight model was built
-and fitted from the reference sim flight logs, so the feel matches a real an FPV quad quad.
+An FPV drone flight game (Godot 4 + C#) with a custom grey-box flight model tuned for a
+realistic FPV feel.
 
-The model (`godot/FlightModel.cs`) is a compact, engine-agnostic grey-box: an FPV quad
-rate curves + a mixer-aware thrust proxy + gravity and thrust/drag on a rigid body,
-with all parameters fitted from captured flight. Validated to ~4% position drift over
-0.5 s of aggressive flight.
+The model (`godot/FlightModel.cs`) is a compact, engine-agnostic grey-box: acro-style
+rate curves + a mixer-aware thrust proxy + gravity and thrust/drag on a rigid body.
+Validated to ~4% position drift over 0.5 s of aggressive flight.
 
 ## Run
 
@@ -33,13 +32,8 @@ current setup on the clipboard.
 
 | Path | What |
 |---|---|
-| `godot/FlightModel.cs` | portable fitted flight model (pure `System.Numerics`) |
+| `godot/FlightModel.cs` | portable flight model (pure `System.Numerics`) |
 | `godot/DroneController.cs` | input, integration, camera, world, replay, perf log |
 | `godot/MotorAudio.cs` | procedural motor audio |
 | `godot/SoundMenu.cs` | in-game sound-test menu |
 | `godot/Hud.cs` | FPV HUD |
-
-> The model-fitting pipeline (the tooling plugin + Python) that
-> produced the fitted parameters lived under `python/`, `mod/`, `validate-cs/` and
-> `scripts/`. It is preserved in git history; restore with
-> `git checkout <sha> -- python mod validate-cs scripts` if you need to re-fit.

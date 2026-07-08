@@ -16,7 +16,7 @@ public readonly struct Sticks
 // FeedAxis and calls Sample() from _PhysicsProcess.
 public sealed class FlightInput
 {
-    // gamepad axis mapping + orientation (defaults match a the reference sim-style Mode 2 layout)
+    // gamepad axis mapping + orientation (defaults match a standard Mode 2 layout)
     public int AxisRoll = 0, AxisPitch = 1, AxisThrottle = 2, AxisYaw = 3;
     public float SignRoll = 1f, SignPitch = -1f, SignYaw = -1f, SignThrottle = 1f;
 

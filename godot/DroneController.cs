@@ -6,13 +6,13 @@ using NVec = System.Numerics.Vector3;
 using NQuat = System.Numerics.Quaternion;
 
 // Drives the portable FlightModel and applies the result to this Node3D, OR replays a
-// recorded the reference sim flight. Both paths go through ONE verified Unity->Godot conversion
+// recorded flight. Both paths go through ONE verified model->Godot conversion
 // (ToGodot), so if the replay looks correct the live model is guaranteed consistent.
-// The model integrates orientation as a proper quaternion (in the reference sim's frame); we
+// The model integrates orientation as a proper quaternion (in the model's frame); we
 // convert via a forward/up basis - no fragile per-axis sequential rotation.
 public partial class DroneController : Node3D, ScreenCoordinator.IGame
 {
-    // FOV 95 deg ~ the reference sim's default (90-100); lower than a real cam's 120+ to cut
+    // FOV 95 deg ~ an FPV cam's mid range (90-100); lower than a real cam's 120+ to cut
     // the rectilinear edge-stretch warping. ~30 deg uptilt (freestyle 25-35), nose-mounted.
     [Export] public float CameraFovDeg = 95f;
     [Export] public float CameraTiltDeg = 30f;
@@ -230,9 +230,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     public override void _PhysicsProcess(double delta)
     {
         Sticks s = _input.Sample(delta);
-        if (_mode == GameMode.FreeFly)                    // free fly: fly + land (no clock/resets)
+        if (_mode == GameMode.FreeFly)                    // free fly: just fly, no clock/resets
         {
-            StepFreeFly(delta, s);
+            StepFlight(delta, s);
             DriveAudio(s);
             ApplyHud("FREE");
             return;
@@ -283,23 +283,6 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         return false;
     }
 
-    // Free flight: rate-command model in the air, rigid-body contact once the legs reach the ground
-    // (land / rest / tip / bounce). The ground is analytic (y=0); gate/prop bounce still goes through
-    // MoveDroneWithBounce.
-    private void StepFreeFly(double delta, Sticks s)
-    {
-        float dt = (float)delta;
-        if (_fm.LowestLeg() <= 0.03f)
-            _fm.StepGround(s.Roll, s.Pitch, s.Yaw, s.Throttle, dt, 0f);
-        else
-            for (int i = 0; i < Substeps; i++)
-                _fm.Step(s.Roll, s.Pitch, s.Yaw, s.Throttle, dt / Substeps);
-
-        MoveDroneWithBounce();
-        _curThrottle = s.Throttle;
-        _flightTime += dt;
-    }
-
     // Integrate the flight model (substepped) and move the body, bouncing off gate bars.
     private void StepFlight(double delta, Sticks s)
     {
@@ -331,12 +314,12 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _audio.SetEffort(Mathf.Clamp(s.Throttle * 0.9f + stick * 0.5f, 0f, 1f));
     }
 
-    // --- the single verified Unity(LH, Y up, +Z fwd) -> Godot(RH, Y up, -Z fwd) conversion ---
+    // --- the single verified model(LH, Y up, +Z fwd) -> Godot(RH, Y up, -Z fwd) conversion ---
     private static void ToGodot(NVec pU, NQuat qU, out Vector3 pos, out Basis basis)
     {
         pos = new Vector3(pU.X, pU.Y, -pU.Z);                 // flip Z (LH->RH)
-        NVec fU = NVec.Transform(new NVec(0, 0, 1), qU);      // body forward (Unity)
-        NVec uU = NVec.Transform(new NVec(0, 1, 0), qU);      // body up (Unity)
+        NVec fU = NVec.Transform(new NVec(0, 0, 1), qU);      // body forward (model frame)
+        NVec uU = NVec.Transform(new NVec(0, 1, 0), qU);      // body up (model frame)
         Vector3 f = new Vector3(fU.X, fU.Y, -fU.Z).Normalized();
         Vector3 u = new Vector3(uU.X, uU.Y, -uU.Z).Normalized();
         Vector3 r = u.Cross(f).Normalized();
