@@ -66,15 +66,15 @@ jobs:
         run: choco install innosetup -y --no-progress
 
       - name: Build launcher installer
-        shell: bash
+        shell: pwsh
+        # Run in PowerShell (not bash): Git-bash mangles ISCC's /D options into paths, which breaks
+        # the compile. GITHUB_WORKSPACE is a native Windows path for the SrcDir define.
         run: |
-          set -e
-          VER="${GITHUB_REF_NAME#v}"
-          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
-          [ -f "$ISCC" ] || ISCC="iscc"
-          ROOT="$(pwd -W 2>/dev/null || pwd)"
-          "$ISCC" "/DMyAppVersion=$VER" "/DSrcDir=$ROOT" installer/OpenDrone.iss
-          ls -la installer_out
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=$ver" "/DSrcDir=$env:GITHUB_WORKSPACE" "installer\OpenDrone.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+          Get-ChildItem installer_out
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
