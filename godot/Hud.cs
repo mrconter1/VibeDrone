@@ -13,12 +13,26 @@ public partial class Hud : Control
     public string RaceStatus = "", Ranks = "", LevelName = "";
 
     private Font _font = null!;
+    private StyleBoxFlat _timerBox = null!, _pillBox = null!, _barBox = null!;
 
     public override void _Ready()
     {
         _font = ThemeDB.FallbackFont;
         MouseFilter = MouseFilterEnum.Ignore;
         SetAnchorsPreset(LayoutPreset.FullRect);
+
+        // cached rounded panels (avoid per-frame allocation in _Draw)
+        _timerBox = RoundBox(new Color(0.04f, 0.05f, 0.07f, 0.58f), 14, new Color(1, 1, 1, 0.08f));
+        _pillBox  = RoundBox(new Color(0.04f, 0.05f, 0.07f, 0.55f), 13, new Color(0.24f, 0.80f, 0.96f, 0.35f));
+        _barBox   = RoundBox(new Color(0f, 0f, 0f, 0.35f), 6, null);
+    }
+
+    private static StyleBoxFlat RoundBox(Color bg, int radius, Color? border)
+    {
+        var s = new StyleBoxFlat { BgColor = bg, CornerDetail = 6 };
+        s.SetCornerRadiusAll(radius);
+        if (border is Color b) { s.BorderColor = b; s.SetBorderWidthAll(1); }
+        return s;
     }
 
     public override void _Process(double delta) => QueueRedraw();
@@ -47,21 +61,37 @@ public partial class Hud : Control
 
         if (_font == null) return;
 
-        // free fly: no clock, just a label; otherwise the lap clock (top centre)
+        var accent = new Color(0.24f, 0.80f, 0.96f);
+
+        // free fly: the whole race clock is hidden - just a small rounded mode pill, top centre
         if (FreeFly)
         {
-            DrawString(_font, new Vector2(cx - 130, 52), "FREE FLY", HorizontalAlignment.Center, 260, 26, new Color(0.24f, 0.80f, 0.96f));
+            const float pw = 120, ph = 30, py = 18;
+            DrawStyleBox(_pillBox, new Rect2(cx - pw / 2f, py, pw, ph));
+            DrawString(_font, new Vector2(cx - pw / 2f, py + 20), "FREE FLY", HorizontalAlignment.Center, pw, 15, accent);
         }
         else
         {
-            DrawRect(new Rect2(cx - 130, 14, 260, 62), new Color(0f, 0f, 0f, 0.45f));
-            DrawString(_font, new Vector2(cx - 130, 60), Format.Time(LapTime, blankZero: false), HorizontalAlignment.Center, 260, 46, Colors.White);
+            // race lap clock: a rounded panel with the running time, an optional last/best row, and a
+            // status caption below. Panel grows to include last/best only once a lap has been set.
+            bool hasLaps = BestLap > 0f;
+            float pw = 236f, py = 16f, ph = hasLaps ? 92f : 60f, px = cx - pw / 2f;
+            DrawStyleBox(_timerBox, new Rect2(px, py, pw, ph));
+
+            DrawString(_font, new Vector2(px, py + 46), Format.Time(LapTime, blankZero: false), HorizontalAlignment.Center, pw, 40, Colors.White);
+
+            if (hasLaps)
+            {
+                DrawRect(new Rect2(px + 20, py + 58, pw - 40, 1), new Color(1, 1, 1, 0.08f));   // divider
+                DrawString(_font, new Vector2(px + 20, py + 82), $"LAST  {Format.Time(LastLap, blankZero: false)}", HorizontalAlignment.Left, pw / 2f - 24, 16, dim);
+                DrawString(_font, new Vector2(cx, py + 82), $"BEST  {Format.Time(BestLap, blankZero: false)}", HorizontalAlignment.Right, pw / 2f - 20, 16, gold);
+            }
+
             if (RaceStatus.Length > 0)
-                DrawString(_font, new Vector2(cx - 130, 74), RaceStatus, HorizontalAlignment.Center, 260, 14, dim);
-            if (LastLap > 0f)
-                DrawString(_font, new Vector2(cx - 132, 98), $"LAST {Format.Time(LastLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, dim);
-            if (BestLap > 0f)
-                DrawString(_font, new Vector2(cx, 98), $"BEST {Format.Time(BestLap, blankZero: false)}", HorizontalAlignment.Center, 132, 17, gold);
+            {
+                Color sc = RaceStatus.StartsWith("GO") ? hud : dim;
+                DrawString(_font, new Vector2(px, py + ph + 16), RaceStatus, HorizontalAlignment.Center, pw, 14, sc);
+            }
         }
 
         // track name + best-laps board (top right)
@@ -81,8 +111,8 @@ public partial class Hud : Control
 
         // throttle bar (right)
         float bh = 240, bx = sz.X - 52, by = c.Y - bh / 2;
-        DrawRect(new Rect2(bx, by, 16, bh), new Color(0f, 0f, 0f, 0.35f));
-        DrawRect(new Rect2(bx, by + bh * (1 - Throttle), 16, bh * Throttle), new Color(0.3f, 0.8f, 1f, 0.9f));
+        DrawStyleBox(_barBox, new Rect2(bx, by, 16, bh));
+        DrawRect(new Rect2(bx + 2, by + 2 + (bh - 4) * (1 - Throttle), 12, (bh - 4) * Throttle), new Color(0.3f, 0.8f, 1f, 0.9f));
 
         // minimal hint
         Text(40, 42, "Esc menu     H help", 15, dim);
