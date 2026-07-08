@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using OpenDrone;
 using Xunit;
@@ -70,6 +71,24 @@ public class FlightGroundTests
         Assert.False(float.IsNaN(fm.Pos.Y) || float.IsInfinity(fm.Pos.Y));
         Assert.InRange(fm.Pos.Y, -0.2f, 0.5f);   // settled near the ground, not launched/sunk
         Assert.True(fm.Vel.Length() < 1.0f, $"still moving: {fm.Vel.Length()}");
+    }
+
+    [Fact]
+    public void Rests_without_sliding()
+    {
+        var fm = new FlightModel();
+        fm.Reset();
+        fm.Pos = new Vector3(0f, 0.033f, 0f);   // resting on its legs
+        fm.Rot = Quaternion.Identity;
+        fm.Vel = new Vector3(1.5f, 0f, 0.8f);   // given a shove along the ground
+        fm.Omega = Vector3.Zero;
+        for (int i = 0; i < 500; i++)
+        {
+            if (fm.LowestLeg() <= 0.03f) fm.StepGround(0f, 0f, 0f, 0.1f, 0.004f, 0f);
+            else fm.Step(0f, 0f, 0f, 0.1f, 0.004f);
+        }
+        float vh = MathF.Sqrt(fm.Vel.X * fm.Vel.X + fm.Vel.Z * fm.Vel.Z);
+        Assert.True(vh < 0.1f, $"still sliding: {vh}");   // friction brings it to a stop
     }
 
     [Fact]

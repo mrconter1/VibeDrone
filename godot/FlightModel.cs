@@ -198,6 +198,7 @@ namespace OpenDrone
                 if (cm > MaxTorque) ctrl *= MaxTorque / cm;
                 Vector3 torque = ctrl;
 
+                float nTot = 0f;   // total normal force -> the friction budget
                 foreach (Vector3 lo in Legs)
                 {
                     Vector3 r = Rotate(Rot, lo);
@@ -205,19 +206,25 @@ namespace OpenDrone
                     if (pen <= 0f) continue;
                     Vector3 legVel = Vel + Vector3.Cross(omegaW, r);
                     float n = MathF.Max(0f, ContactK * pen - ContactC * legVel.Y);
-                    var vt = new Vector3(legVel.X, 0f, legVel.Z);
-                    float vm = vt.Length();
-                    // friction capped so it can at most stop the tangential slide this substep (no energy add)
-                    Vector3 fr = vm > 1e-4f ? -MathF.Min(FrictionMu * n, vm / sub) * (vt / vm) : Vector3.Zero;
-                    var fc = new Vector3(fr.X, n, fr.Z);
-                    force += fc;
-                    torque += Vector3.Cross(r, fc);   // r, fc both world
+                    var nf = new Vector3(0f, n, 0f);
+                    force += nf;
+                    torque += Vector3.Cross(r, nf);   // r, nf both world
+                    nTot += n;
                 }
 
                 torque -= AngDrag * omegaW;
 
                 Vel += force * sub;
                 omegaW += torque / MathF.Max(Inertia, 1e-4f) * sub;
+
+                // stick-slip Coulomb friction on the horizontal velocity: if the slide is within the
+                // budget (mu * normal), snap it to zero (STICK - this is what makes it stand still);
+                // otherwise scrub off the budget and keep sliding (slip). Prevents the resting glide.
+                float maxDv = FrictionMu * nTot * sub;
+                float vh = MathF.Sqrt(Vel.X * Vel.X + Vel.Z * Vel.Z);
+                if (vh <= maxDv) { Vel.X = 0f; Vel.Z = 0f; }
+                else if (vh > 1e-6f) { float k = (vh - maxDv) / vh; Vel.X *= k; Vel.Z *= k; }
+
                 Pos += Vel * sub;
                 Rot = IntegrateQuatWorld(Rot, omegaW, sub);
             }
