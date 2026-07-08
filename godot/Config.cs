@@ -27,6 +27,13 @@ public static class Config
     // drone - FPV camera uptilt in degrees (Settings > Drone)
     public static float CameraTilt = 30f;
 
+    // last session - so "Start" resumes the last track + mode (+ free-fly pose)
+    public static string LastLevelId = "";
+    public static int LastMode = 0;                  // 0 Race, 1 Free Fly
+    public static bool HasFreePose = false;          // a saved free-fly pose exists
+    public static string FreePoseLevel = "";         // which level that pose belongs to
+    public static float[] FreePose = new float[7];   // model frame: px py pz  qx qy qz qw
+
     public static void Load()
     {
         if (!Persistence.TryLoad(Path, out Variant v) || v.VariantType != Variant.Type.Dictionary) return;
@@ -43,6 +50,15 @@ public static class Config
         if (d.ContainsKey("auto_reset"))  AutoReset = d["auto_reset"].AsBool();
         if (d.ContainsKey("auto_reset_s")) AutoResetSeconds = Mathf.Clamp(d["auto_reset_s"].AsSingle(), 0.5f, 10f);
         if (d.ContainsKey("cam_tilt"))    CameraTilt = Mathf.Clamp(d["cam_tilt"].AsSingle(), 0f, 60f);
+        if (d.ContainsKey("last_level"))  LastLevelId = d["last_level"].AsString();
+        if (d.ContainsKey("last_mode"))   LastMode = d["last_mode"].AsInt32();
+        if (d.ContainsKey("has_free_pose")) HasFreePose = d["has_free_pose"].AsBool();
+        if (d.ContainsKey("free_pose_level")) FreePoseLevel = d["free_pose_level"].AsString();
+        if (d.ContainsKey("free_pose"))
+        {
+            var a = d["free_pose"].AsGodotArray();
+            if (a.Count == 7) for (int i = 0; i < 7; i++) FreePose[i] = a[i].AsSingle();
+        }
     }
 
     public static void Save() => Persistence.Save(Path, new Godot.Collections.Dictionary
@@ -52,6 +68,10 @@ public static class Config
         { "blur_tint", BlurTint }, { "blur_vig", BlurVignette },
         { "msaa", Msaa }, { "fxaa", Fxaa }, { "menu_ssaa", MenuSsaa },
         { "auto_reset", AutoReset }, { "auto_reset_s", AutoResetSeconds }, { "cam_tilt", CameraTilt },
+        { "last_level", LastLevelId }, { "last_mode", LastMode },
+        { "has_free_pose", HasFreePose }, { "free_pose_level", FreePoseLevel },
+        { "free_pose", new Godot.Collections.Array {
+            FreePose[0], FreePose[1], FreePose[2], FreePose[3], FreePose[4], FreePose[5], FreePose[6] } },
     });
 
     public const int MaxIterations = 5;   // backdrop builds this many H+V stages; some may be idle

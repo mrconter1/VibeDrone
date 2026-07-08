@@ -425,10 +425,47 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     }
 
     // --- menu navigation: thin delegators to the ScreenCoordinator (called by the menu screens) ---
-    public void StartGame() => _coord.StartGame();
-    public void OpenMain() => _coord.OpenMain();
+
+    // Main-menu Start: resume the last session - same track and mode as last time, and in Free Fly
+    // pick up at the position/orientation you left off.
+    public void StartGame()
+    {
+        _mode = Config.LastMode == 1 ? GameMode.FreeFly : GameMode.Race;
+        int idx = LevelStore.IndexOf(Config.LastLevelId);
+        _coord.PlayLevel(idx < 0 ? 0 : idx);          // load the level (mode-aware start) + unpause
+        if (_mode == GameMode.FreeFly) RestoreFreePose();
+    }
+
+    public void OpenMain() { SaveSession(); _coord.OpenMain(); }
     public void ResumeGame() => _coord.ResumeGame();
-    public void OpenPause() => _coord.OpenPause();
+    public void OpenPause() { SaveSession(); _coord.OpenPause(); }
+
+    // Remember the current track + mode (+ the live Free-Fly pose) so Start can resume it.
+    private void SaveSession()
+    {
+        Config.LastLevelId = LevelStore.IdAt(_levelIndex);
+        Config.LastMode = _mode == GameMode.FreeFly ? 1 : 0;
+        if (_mode == GameMode.FreeFly)
+        {
+            Config.HasFreePose = true;
+            Config.FreePoseLevel = Config.LastLevelId;
+            Config.FreePose = new[] { _fm.Pos.X, _fm.Pos.Y, _fm.Pos.Z, _fm.Rot.X, _fm.Rot.Y, _fm.Rot.Z, _fm.Rot.W };
+        }
+        else Config.HasFreePose = false;
+        Config.Save();
+    }
+
+    // Free Fly: drop the drone back at the saved model pose (only if it's for this level).
+    private void RestoreFreePose()
+    {
+        if (!Config.HasFreePose || Config.FreePoseLevel != LevelStore.IdAt(_levelIndex)) return;
+        float[] f = Config.FreePose;
+        _fm.Pos = new NVec(f[0], f[1], f[2]);
+        _fm.Rot = NQuat.Normalize(new NQuat(f[3], f[4], f[5], f[6]));
+        _fm.Vel = NVec.Zero;
+        ApplyTransform(_fm.Pos, _fm.Rot);
+        _drone.ResetPhysicsInterpolation();
+    }
     public void OpenHelp() => _coord.OpenHelp();
     public void CloseHelp() => _coord.CloseHelp();
     public void OpenLevels(bool fromPause) => _coord.OpenLevels(fromPause);
@@ -476,6 +513,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     public void CycleGameMode(int dir)
     {
         _mode = _mode == GameMode.Race ? GameMode.FreeFly : GameMode.Race;   // two modes: toggle
+        Config.LastMode = _mode == GameMode.FreeFly ? 1 : 0;
+        Config.Save();
         StartRace();   // respawn for the new mode (armed for Race, free for Free Fly)
     }
 
