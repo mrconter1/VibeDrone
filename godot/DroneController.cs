@@ -22,6 +22,7 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     [Export] public float DroneRadius = 0.15f;   // ~5" quad half-width, for gate collision
     [Export] public float Restitution = 0.18f;   // normal rebound (low: real quads barely bounce)
     [Export] public float HitFriction = 0.55f;   // tangential speed scrubbed off on a hit (deflect, not slide)
+    [Export] public float MuzzleSpeed = 22f;      // ball launch speed (the axis-7 switch fires balls)
 
     private readonly FlightModel _fm = new();
     private readonly FlightInput _input = new();   // gamepad/keyboard -> Sticks each physics tick
@@ -142,6 +143,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _playback = new PlaybackController();
         _playback.Setup(_recorder, _cam);
         AddChild(_playback);
+
+        BuildFireSound();   // pooled "bop" voices for the ball launcher
     }
 
     // The full-screen menu system (orbit camera, blur backdrop, screens + coordinator) and the editor.
@@ -225,6 +228,66 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     {
         if (_race.Running) _recorder.UpdateVisuals(_race.LapTime, true, _drone.GlobalPosition);
         else _recorder.HideGhost();
+        UpdateBallLauncher((float)delta);
+    }
+
+    private float _fireCooldown;
+    private AudioStreamPlayer[] _firePool = null!;   // pooled "bop" voices so rapid fire overlaps
+    private int _fireVoice;
+
+    // Fire balls out of the nose while the axis-7 switch is at its -1 detent (idle/default = no fire).
+    private void UpdateBallLauncher(float delta)
+    {
+        _fireCooldown -= delta;
+        Godot.Collections.Array<int> pads = Input.GetConnectedJoypads();
+        if (pads.Count == 0) return;
+        float sw = Input.GetJoyAxis(pads[0], (JoyAxis)7);
+        if (sw < -0.5f && _fireCooldown <= 0f)
+        {
+            FireBall();
+            _fireCooldown = 0.12f;
+        }
+    }
+
+    private void FireBall()
+    {
+        Vector3 fwd = -_cam.GlobalBasis.Z;                       // where the nose camera looks
+        var ball = new Ball();
+        AddChild(ball);
+        ball.GlobalPosition = _drone.GlobalPosition + fwd * 0.35f;
+        var droneVel = new Vector3(_fm.Vel.X, _fm.Vel.Y, -_fm.Vel.Z);   // model -> Godot (Z flip)
+        ball.LinearVelocity = droneVel + fwd * MuzzleSpeed;      // inherit the drone's velocity + muzzle
+        ball.AddCollisionExceptionWith(_drone);
+
+        _firePool[_fireVoice].PitchScale = 0.9f + GD.Randf() * 0.2f;   // slight variation per shot
+        _firePool[_fireVoice].Play();
+        _fireVoice = (_fireVoice + 1) % _firePool.Length;
+    }
+
+    // A short percussive "bop" launch sound, generated procedurally (no asset files): a sine with a
+    // fast pitch-drop and quick decay. Pooled into a few voices so back-to-back shots don't cut off.
+    private void BuildFireSound()
+    {
+        const int rate = 22050;
+        int n = (int)(0.10f * rate);
+        var data = new byte[n * 2];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / rate;
+            float env = Mathf.Exp(-t * 42f);
+            float freq = 700f * Mathf.Exp(-t * 30f) + 90f;   // pitch drops ~790 -> ~120 Hz
+            float s = Mathf.Sin(Mathf.Tau * freq * t) * env * 0.6f;
+            short v = (short)(Mathf.Clamp(s, -1f, 1f) * 32767f);
+            data[i * 2] = (byte)(v & 0xff);
+            data[i * 2 + 1] = (byte)((v >> 8) & 0xff);
+        }
+        var wav = new AudioStreamWav { Format = AudioStreamWav.FormatEnum.Format16Bits, MixRate = rate, Stereo = false, Data = data };
+        _firePool = new AudioStreamPlayer[4];
+        for (int i = 0; i < _firePool.Length; i++)
+        {
+            _firePool[i] = new AudioStreamPlayer { Stream = wav, VolumeDb = -5f };
+            AddChild(_firePool[i]);
+        }
     }
 
     public override void _PhysicsProcess(double delta)

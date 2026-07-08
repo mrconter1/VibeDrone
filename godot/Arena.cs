@@ -179,6 +179,12 @@ public partial class Arena : Node3D
         _groundMat = new ShaderMaterial { Shader = new Shader { Code = GridShaderCode } };
         ground.MaterialOverride = _groundMat;
         AddChild(ground);
+
+        // ball-only floor (collision layer 2): fired balls bounce on it, but the drone (mask = layer 1)
+        // ignores it, so the flight model is unaffected.
+        var ballFloor = new StaticBody3D { Position = new Vector3(0f, -0.5f, 0f), CollisionLayer = 0b0010, CollisionMask = 0 };
+        ballFloor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000f, 1f, 2000f) } });
+        AddChild(ballFloor);
     }
 
     private void BuildGates(List<Pose> poses)
