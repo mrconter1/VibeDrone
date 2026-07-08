@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeDrone — Realistic FPV Sim</title>
+<meta name="description" content="VibeDrone — a realistic FPV drone racing sim. Free download for Windows.">
+<style>
+  :root{
+    --bg:#08090c; --bg2:#0b0d12; --card:rgba(14,17,22,.92);
+    --text:#e6edf3; --dim:rgba(230,237,243,.55); --muted:rgba(230,237,243,.32);
+    --accent:#3dccf5; --accent2:#2aa9d6; --good:#9bfaa4; --border:rgba(255,255,255,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%, #10202b 0%, var(--bg) 60%) fixed;
+    color:var(--text); font:16px/1.6 "Segoe UI",system-ui,-apple-system,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{color:var(--text)}
+  .wrap{width:100%; max-width:940px; margin:0 auto; padding:0 24px}
+  header{padding:22px 0; display:flex; align-items:center; justify-content:space-between}
+  .brand{font-weight:600; letter-spacing:.06em; font-size:18px}
+  .brand b{color:var(--accent)}
+  nav a{margin-left:20px; color:var(--dim); font-size:14px}
+
+  .hero{text-align:center; padding:70px 0 40px}
+  .logo{
+    font-family:"Bahnschrift","Segoe UI Semibold",sans-serif; font-weight:700;
+    font-size:clamp(48px,9vw,104px); line-height:1; letter-spacing:.02em; margin:0;
+  }
+  .logo .a{color:var(--text)} .logo .b{color:var(--accent)}
+  .tagline{color:var(--dim); letter-spacing:.42em; font-size:clamp(12px,2.2vw,16px);
+    text-transform:uppercase; margin:18px 0 0}
+  .divider{width:64px; height:3px; margin:26px auto 0; border-radius:3px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+
+  .cta{margin:44px 0 10px; display:flex; gap:14px; justify-content:center; flex-wrap:wrap}
+  .btn{
+    display:inline-flex; align-items:center; gap:10px; padding:15px 28px; border-radius:12px;
+    font-weight:600; font-size:16px; cursor:pointer; border:1px solid transparent; transition:.15s;
+  }
+  .btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent2)); color:#04121a;
+    box-shadow:0 8px 30px rgba(61,204,245,.22)}
+  .btn.primary:hover{transform:translateY(-1px); box-shadow:0 10px 34px rgba(61,204,245,.34)}
+  .btn.ghost{background:rgba(255,255,255,.04); border-color:var(--border); color:var(--text)}
+  .btn.ghost:hover{background:rgba(255,255,255,.08)}
+  .relmeta{color:var(--muted); font-size:13px; margin-top:8px; min-height:18px}
+
+  .features{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:16px; margin:60px 0}
+  .feat{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px 20px}
+  .feat h3{margin:0 0 6px; font-size:16px; color:var(--text)}
+  .feat p{margin:0; color:var(--dim); font-size:14px}
+  .feat .ic{font-size:22px; color:var(--accent); margin-bottom:10px}
+
+  .install{background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:24px 26px; margin:0 0 60px}
+  .install h2{margin:0 0 12px; font-size:18px}
+  .install ol{margin:0; padding-left:20px; color:var(--dim); font-size:14px}
+  .install code{background:rgba(255,255,255,.06); padding:2px 7px; border-radius:6px; color:var(--text)}
+
+  footer{margin-top:auto; padding:28px 0; border-top:1px solid var(--border); color:var(--muted);
+    font-size:13px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Vibe<b>Drone</b></div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/mrconter1/VibeDrone" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h1 class="logo"><span class="a">VIBE</span><span class="b">DRONE</span></h1>
+    <p class="tagline">Realistic FPV Sim</p>
+    <div class="divider"></div>
+
+    <div class="cta">
+      <a id="download" class="btn primary" href="https://github.com/mrconter1/VibeDrone/releases/latest" target="_blank" rel="noopener">⬇ Download for Windows</a>
+      <a id="portable" class="btn ghost" href="https://github.com/mrconter1/VibeDrone/releases/latest" target="_blank" rel="noopener">Portable .zip</a>
+    </div>
+    <div class="relmeta" id="relmeta">Loading latest release…</div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="feat"><div class="ic">◎</div><h3>Grey-box flight model</h3><p>A hand-tuned rate-command flight model with a realistic launch, lean and fall.</p></div>
+    <div class="feat"><div class="ic">⏱</div><h3>Race the clock</h3><p>Gate-to-gate laps with last/best times and per-track records you can chase.</p></div>
+    <div class="feat"><div class="ic">✎</div><h3>Build your tracks</h3><p>Place gates in the built-in editor and fly your own courses.</p></div>
+    <div class="feat"><div class="ic">✈</div><h3>Free-fly mode</h3><p>No clock, no gates — just open-air flying to warm up your sticks.</p></div>
+  </section>
+
+  <section class="install" id="install">
+    <h2>Installing</h2>
+    <ol>
+      <li>Download the <b>Windows installer</b> above and run <code>OpenDrone-Setup.exe</code>.</li>
+      <li>Prefer no install? Grab the <b>portable .zip</b>, extract it, and run <code>OpenDrone.exe</code>.</li>
+      <li>Plug in an FPV transmitter/gamepad for the intended feel (keyboard also works).</li>
+    </ol>
+  </section>
+</div>
+
+<footer class="wrap">
+  <span>VibeDrone — free &amp; open on <a href="https://github.com/mrconter1/VibeDrone" target="_blank" rel="noopener">GitHub</a>.</span>
+  <span id="ver"></span>
+</footer>
+
+<script>
+  const REPO = "mrconter1/VibeDrone";
+  fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(rel => {
+      const assets = rel.assets || [];
+      const exe = assets.find(a => /setup.*\.exe$/i.test(a.name));
+      const zip = assets.find(a => /\.zip$/i.test(a.name));
+      const dl = document.getElementById("download");
+      const pt = document.getElementById("portable");
+      if (exe) { dl.href = exe.browser_download_url; dl.textContent = "⬇ Download for Windows"; }
+      if (zip) { pt.href = zip.browser_download_url; } else { pt.style.display = "none"; }
+      const when = new Date(rel.published_at).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+      document.getElementById("relmeta").textContent = `${rel.tag_name} · released ${when}`;
+      document.getElementById("ver").textContent = rel.tag_name;
+    })
+    .catch(() => {
+      document.getElementById("relmeta").innerHTML =
+        `No published release yet — see <a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener">all releases</a>.`;
+    });
+</script>
+</body>
+</html>

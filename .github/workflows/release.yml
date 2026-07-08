@@ -52,12 +52,24 @@ jobs:
           mkdir -p build
           godot --headless --path godot --export-release "Windows Desktop"
 
-      - name: Package
+      - name: Package portable zip
         shell: bash
         run: 7z a "OpenDrone-${GITHUB_REF_NAME}-windows.zip" ./build/*
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DMyAppVersion=$VER" installer/OpenDrone.iss
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: OpenDrone-*-windows.zip
+          files: |
+            OpenDrone-*-windows.zip
+            installer_out/OpenDrone-Setup-*.exe
           generate_release_notes: true
