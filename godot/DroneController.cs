@@ -230,9 +230,9 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     public override void _PhysicsProcess(double delta)
     {
         Sticks s = _input.Sample(delta);
-        if (_mode == GameMode.FreeFly)                    // free fly: just fly, no clock/resets
+        if (_mode == GameMode.FreeFly)                    // free fly: fly + land (no clock/resets)
         {
-            StepFlight(delta, s);
+            StepFreeFly(delta, s);
             DriveAudio(s);
             ApplyHud("FREE");
             return;
@@ -281,6 +281,23 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _curThrottle = s.Throttle; _audio.SetEffort(0f); _recorder.HideGhost();   // idle: no clock, no ghost
         ApplyHud("LIVE");
         return false;
+    }
+
+    // Free flight: rate-command model in the air, rigid-body contact once the legs reach the ground
+    // (land / rest / tip / bounce). The ground is analytic (y=0); gate/prop bounce still goes through
+    // MoveDroneWithBounce.
+    private void StepFreeFly(double delta, Sticks s)
+    {
+        float dt = (float)delta;
+        if (_fm.LowestLeg() <= 0.03f)
+            _fm.StepGround(s.Roll, s.Pitch, s.Yaw, s.Throttle, dt, 0f);
+        else
+            for (int i = 0; i < Substeps; i++)
+                _fm.Step(s.Roll, s.Pitch, s.Yaw, s.Throttle, dt / Substeps);
+
+        MoveDroneWithBounce();
+        _curThrottle = s.Throttle;
+        _flightTime += dt;
     }
 
     // Integrate the flight model (substepped) and move the body, bouncing off gate bars.

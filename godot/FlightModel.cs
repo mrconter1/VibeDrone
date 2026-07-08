@@ -141,5 +141,78 @@ namespace OpenDrone
             Vel = newVel;
             Pos = newPos;
         }
+
+        // --- free-mode ground contact (rigid body): lets the drone land, rest on its legs, tip and
+        //     balance with motor torque, and bounce. Torque-driven, unlike the airborne rate model. ---
+
+        // 4 leg/motor contact points in body frame (matches the visual quad's arm spread).
+        public static readonly Vector3[] Legs =
+        {
+            new(0.13f, -0.035f, 0.13f), new(0.13f, -0.035f, -0.13f),
+            new(-0.13f, -0.035f, 0.13f), new(-0.13f, -0.035f, -0.13f),
+        };
+
+        // contact + rigid-body tuning (all in accel/torque units, mass = 1)
+        public float ContactK = 1400f;    // per-leg normal spring stiffness
+        public float ContactC = 16f;      // per-leg normal damping (lower -> more bounce)
+        public float FrictionMu = 1.0f;   // per-leg Coulomb friction
+        public float Inertia = 0.16f;     // angular inertia (higher -> slower tipping)
+        public float TorqueGain = 0.55f;  // motor rate-control authority (stick -> torque)
+        public float AngDrag = 0.5f;      // angular-rate damping
+        public int GroundSubsteps = 8;    // micro-steps for stiff-contact stability
+
+        // World height of the lowest leg (<= groundY means it's touching / penetrating).
+        public float LowestLeg()
+        {
+            float min = float.MaxValue;
+            foreach (Vector3 lo in Legs)
+            {
+                float y = Pos.Y + Rotate(Rot, lo).Y;
+                if (y < min) min = y;
+            }
+            return min;
+        }
+
+        // One tick of grounded rigid-body dynamics against a flat ground at groundY: collective thrust +
+        // motor rate-control torque, plus a spring-damper normal force and capped Coulomb friction at
+        // each penetrating leg. Substepped internally for stiff-contact stability.
+        public void StepGround(float roll, float pitch, float yaw, float throttle, float dt, float groundY)
+        {
+            float sub = dt / Math.Max(1, GroundSubsteps);
+            float thrust = ThrustK * ThrustProxy(roll, pitch, yaw, throttle);
+            Vector3 cmd = BodyRates(roll, pitch, yaw);   // target body rates for the rate controller
+
+            for (int i = 0; i < GroundSubsteps; i++)
+            {
+                Vector3 up = Rotate(Rot, Vector3.UnitY);
+                Vector3 force = new Vector3(0f, -G, 0f) + up * thrust;
+
+                Vector3 omegaBody = Rotate(Rot, Omega, inverse: true);
+                Vector3 torque = Rotate(Rot, (cmd - omegaBody) * TorqueGain);   // motors drive toward cmd rate
+
+                foreach (Vector3 lo in Legs)
+                {
+                    Vector3 r = Rotate(Rot, lo);
+                    float pen = groundY - (Pos.Y + r.Y);
+                    if (pen <= 0f) continue;
+                    Vector3 legVel = Vel + Vector3.Cross(Omega, r);
+                    float n = MathF.Max(0f, ContactK * pen - ContactC * legVel.Y);
+                    var vt = new Vector3(legVel.X, 0f, legVel.Z);
+                    float vm = vt.Length();
+                    // friction capped so it can at most stop the tangential slide this substep (no energy add)
+                    Vector3 fr = vm > 1e-4f ? -MathF.Min(FrictionMu * n, vm / sub) * (vt / vm) : Vector3.Zero;
+                    var fc = new Vector3(fr.X, n, fr.Z);
+                    force += fc;
+                    torque += Vector3.Cross(r, fc);
+                }
+
+                torque -= AngDrag * Omega;
+
+                Vel += force * sub;
+                Omega += torque / MathF.Max(Inertia, 1e-4f) * sub;
+                Pos += Vel * sub;
+                Rot = IntegrateQuat(Rot, Omega, sub);
+            }
+        }
     }
 }
