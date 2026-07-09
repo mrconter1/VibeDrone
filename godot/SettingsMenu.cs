@@ -17,6 +17,7 @@ public partial class SettingsMenu : MenuScreen
     private Label _hint = null!;
     private bool _editing;
     private Control? _editCtrl;
+    private StyleBoxFlat _tabOn = null!, _tabOff = null!, _tabHover = null!;
 
     private const string NavHint = "‹ ›  switch tab      Enter  edit value      Esc  back";
     private const string EditHint = "‹ ›  adjust      Enter / Esc  done";
@@ -30,6 +31,7 @@ public partial class SettingsMenu : MenuScreen
     {
         _debug.Text = DebugLabel();
         if (_editing) ExitEdit();
+        Callable.From(EqualizeTabHeights).CallDeferred();   // after layout, once font metrics are known
         ShowTab(_active);
         FocusFirstIn(_active);
     }
@@ -109,6 +111,8 @@ public partial class SettingsMenu : MenuScreen
 
     protected override void Build()
     {
+        BuildTabStyles();
+
         VBoxContainer v = CenteredPanel(Vector2.Zero);
 
         v.AddChild(UiTheme.Title("SETTINGS", 46));
@@ -144,6 +148,23 @@ public partial class SettingsMenu : MenuScreen
         _tabPanels.Add(panel);
     }
 
+    private void BuildTabStyles()
+    {
+        _tabOn = new StyleBoxFlat { BgColor = new Color(UiTheme.Accent, 0.16f) };
+        _tabOn.SetCornerRadiusAll(UiTheme.RadSm);
+        _tabOn.BorderColor = new Color(UiTheme.Accent, 0.6f);
+        _tabOn.SetBorderWidthAll(1);
+        _tabOn.SetContentMarginAll(10);
+
+        _tabOff = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0f) };
+        _tabOff.SetCornerRadiusAll(UiTheme.RadSm);
+        _tabOff.SetContentMarginAll(10);
+
+        _tabHover = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.06f) };
+        _tabHover.SetCornerRadiusAll(UiTheme.RadSm);
+        _tabHover.SetContentMarginAll(10);
+    }
+
     private void ShowTab(int i)
     {
         if (_editing) ExitEdit();
@@ -151,8 +172,27 @@ public partial class SettingsMenu : MenuScreen
         for (int k = 0; k < _tabPanels.Count; k++)
         {
             _tabPanels[k].Visible = k == i;
-            _tabBtns[k].Modulate = k == i ? Colors.White : new Color(1, 1, 1, 0.55f);
+            bool on = k == i;
+            Button b = _tabBtns[k];
+            b.AddThemeStyleboxOverride("normal", on ? _tabOn : _tabOff);
+            b.AddThemeStyleboxOverride("hover", on ? _tabOn : _tabHover);
+            b.AddThemeStyleboxOverride("pressed", on ? _tabOn : _tabHover);
+            b.AddThemeColorOverride("font_color", on ? UiTheme.Accent : UiTheme.TextDim);
+            b.AddThemeColorOverride("font_hover_color", on ? UiTheme.Accent : UiTheme.Text);
         }
+    }
+
+    // Give every tab panel the same height (the tallest), so switching tabs doesn't resize the card.
+    private void EqualizeTabHeights()
+    {
+        float h = 0f;
+        foreach (Control p in _tabPanels)
+        {
+            p.CustomMinimumSize = new Vector2(480, 0);
+            h = Mathf.Max(h, p.GetCombinedMinimumSize().Y);
+        }
+        foreach (Control p in _tabPanels)
+            p.CustomMinimumSize = new Vector2(480, h);
     }
 
     // --- Graphics tab ---
