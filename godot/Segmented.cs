@@ -25,7 +25,7 @@ public partial class Segmented : Control
         _fill.SetCornerRadiusAll(UiTheme.RadMd);
         _pill.SetCornerRadiusAll(UiTheme.RadSm);
 
-        _icon = new UiIcon(glyph, UiTheme.TextDim)
+        _icon = new UiIcon(glyph, UiTheme.IconDim)
         {
             CustomMinimumSize = new Vector2(24, 24),
             Position = new Vector2(UiTheme.S5, 16),
@@ -80,7 +80,7 @@ public partial class Segmented : Control
         float nt = Mathf.MoveToward(_t, target, (float)delta * 8f);
         if (Mathf.IsEqualApprox(nt, _t)) return;
         _t = nt;
-        _icon.Color = UiTheme.TextDim.Lerp(UiTheme.Text, _t);
+        _icon.Color = UiTheme.IconDim.Lerp(UiTheme.Text, _t);
         _icon.QueueRedraw();
         _label.AddThemeColorOverride("font_color", new Color(UiTheme.Text, Mathf.Lerp(0.72f, 1f, _t)));
         QueueRedraw();

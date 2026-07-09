@@ -31,7 +31,7 @@ public partial class MenuRow : Button
         h.AddThemeConstantOverride("separation", UiTheme.S4);
         AddChild(h);
 
-        _icon = new UiIcon(glyph, UiTheme.TextDim)
+        _icon = new UiIcon(glyph, UiTheme.IconDim)
         {
             CustomMinimumSize = new Vector2(24, 24),
             SizeFlagsVertical = SizeFlags.ShrinkCenter,
@@ -62,7 +62,7 @@ public partial class MenuRow : Button
         float nt = Mathf.MoveToward(_t, target, (float)delta * 8f);
         if (Mathf.IsEqualApprox(nt, _t)) return;
         _t = nt;
-        _icon.Color = UiTheme.TextDim.Lerp(UiTheme.Text, _t);
+        _icon.Color = UiTheme.IconDim.Lerp(UiTheme.Text, _t);
         _icon.QueueRedraw();
         _label.AddThemeColorOverride("font_color", new Color(UiTheme.Text, Mathf.Lerp(0.72f, 1f, _t)));
         QueueRedraw();

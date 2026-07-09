@@ -21,7 +21,7 @@ public partial class UiIcon : Control
 
         // helpers in local box coords (0..1 -> pixels)
         Vector2 P(float x, float y) => o + new Vector2(x * s, y * s);
-        void Line(float x1, float y1, float x2, float y2) => DrawLine(P(x1, y1), P(x2, y2), c, w, true);
+        void Line(float x1, float y1, float x2, float y2) => DrawLine(P(x1, y1), P(x2, y2), c, w, false);
 
         switch (Glyph)
         {
@@ -30,7 +30,7 @@ public partial class UiIcon : Control
                 break;
 
             case "restart":   // circular arrow, gap + head at top-right
-                DrawArc(P(0.5f, 0.5f), s * 0.30f, Mathf.DegToRad(-40), Mathf.DegToRad(250), 24, c, w, true);
+                DrawArc(P(0.5f, 0.5f), s * 0.30f, Mathf.DegToRad(-40), Mathf.DegToRad(250), 24, c, w, false);
                 DrawColoredPolygon(new[] { P(0.72f, 0.16f), P(0.86f, 0.30f), P(0.66f, 0.34f) }, c);
                 break;
 
@@ -45,24 +45,24 @@ public partial class UiIcon : Control
                 break;
 
             case "watch":     // eye
-                DrawArc(P(0.5f, 0.62f), s * 0.34f, Mathf.DegToRad(200), Mathf.DegToRad(340), 20, c, w, true);
-                DrawArc(P(0.5f, 0.38f), s * 0.34f, Mathf.DegToRad(20), Mathf.DegToRad(160), 20, c, w, true);
+                DrawArc(P(0.5f, 0.62f), s * 0.34f, Mathf.DegToRad(200), Mathf.DegToRad(340), 20, c, w, false);
+                DrawArc(P(0.5f, 0.38f), s * 0.34f, Mathf.DegToRad(20), Mathf.DegToRad(160), 20, c, w, false);
                 DrawCircle(P(0.5f, 0.5f), s * 0.11f, c);
                 break;
 
             case "settings":  // gear: ring + radial teeth + hub
-                DrawArc(P(0.5f, 0.5f), s * 0.24f, 0, Mathf.Tau, 28, c, w, true);
+                DrawArc(P(0.5f, 0.5f), s * 0.24f, 0, Mathf.Tau, 28, c, w, false);
                 for (int i = 0; i < 8; i++)
                 {
                     float a = i * Mathf.Tau / 8f;
                     var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                    DrawLine(P(0.5f, 0.5f) + d * (s * 0.24f), P(0.5f, 0.5f) + d * (s * 0.36f), c, w, true);
+                    DrawLine(P(0.5f, 0.5f) + d * (s * 0.24f), P(0.5f, 0.5f) + d * (s * 0.36f), c, w, false);
                 }
                 DrawCircle(P(0.5f, 0.5f), s * 0.07f, c);
                 break;
 
             case "controls":  // gamepad
-                DrawArc(P(0.5f, 0.52f), s * 0.30f, Mathf.DegToRad(20), Mathf.DegToRad(160), 20, c, w, true);
+                DrawArc(P(0.5f, 0.52f), s * 0.30f, Mathf.DegToRad(20), Mathf.DegToRad(160), 20, c, w, false);
                 Line(0.24f, 0.44f, 0.30f, 0.66f); Line(0.76f, 0.44f, 0.70f, 0.66f); Line(0.30f, 0.66f, 0.70f, 0.66f);
                 Line(0.34f, 0.52f, 0.44f, 0.52f); Line(0.39f, 0.47f, 0.39f, 0.57f);   // d-pad
                 DrawCircle(P(0.62f, 0.52f), s * 0.045f, c);                            // button
@@ -75,7 +75,7 @@ public partial class UiIcon : Control
 
             case "exit":      // power
                 Line(0.5f, 0.16f, 0.5f, 0.46f);
-                DrawArc(P(0.5f, 0.54f), s * 0.30f, Mathf.DegToRad(-60), Mathf.DegToRad(240), 24, c, w, true);
+                DrawArc(P(0.5f, 0.54f), s * 0.30f, Mathf.DegToRad(-60), Mathf.DegToRad(240), 24, c, w, false);
                 break;
 
             case "create":    // plus

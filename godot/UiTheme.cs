@@ -14,6 +14,9 @@ public static class UiTheme
     public static readonly Color Text     = new(0.90f, 0.93f, 0.96f);
     public static readonly Color TextDim  = new(0.90f, 0.93f, 0.96f, 0.42f);
     public static readonly Color TextMuted = new(0.90f, 0.93f, 0.96f, 0.26f);  // section labels / faint
+    // Opaque dim for icons: translucent fills double-darken where a glyph's strokes overlap, so icons
+    // use solid colours (this is the resting tone; rows lerp it up to Text on focus).
+    public static readonly Color IconDim  = new(0.52f, 0.57f, 0.63f);
     public static readonly Color Accent   = new(0.24f, 0.80f, 0.96f);         // cyan
     public static readonly Color Good     = new(0.60f, 0.98f, 0.64f);         // best/records (used sparingly)
 

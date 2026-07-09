@@ -14,6 +14,13 @@ public partial class SettingsMenu : MenuScreen
     private readonly List<Control> _tabPanels = new();
     private int _active;
 
+    private Label _hint = null!;
+    private bool _editing;
+    private Control? _editCtrl;
+
+    private const string NavHint = "‹ ›  switch tab      Enter  edit value      Esc  back";
+    private const string EditHint = "‹ ›  adjust      Enter / Esc  done";
+
     public void Setup(DroneController ctrl, MotorAudio audio, SoundMenu sound)
     {
         Ctrl = ctrl; _audio = audio; _sound = sound;
@@ -22,10 +29,83 @@ public partial class SettingsMenu : MenuScreen
     protected override void OnShow()
     {
         _debug.Text = DebugLabel();
-        _tabBtns[_active].CallDeferred(Control.MethodName.GrabFocus);
+        if (_editing) ExitEdit();
+        ShowTab(_active);
+        FocusFirstIn(_active);
     }
 
     protected override void Back() => Ctrl.MenuBack();
+
+    // Left/Right always switch tabs; Enter on a value enters "edit mode" where Left/Right adjust it and
+    // Enter/Esc leave. This runs before the focused control, so we choose what it sees.
+    public override void _Input(InputEvent ev)
+    {
+        if (!Visible || ev is not InputEventKey { Pressed: true } k) { base._Input(ev); return; }
+
+        if (_editing)
+        {
+            if (k.Keycode is Key.Enter or Key.KpEnter or Key.Escape or Key.Space)
+            {
+                ExitEdit();
+                GetViewport().SetInputAsHandled();
+            }
+            else if (k.Keycode is not (Key.Left or Key.Right))
+            {
+                GetViewport().SetInputAsHandled();   // lock focus on the value while editing
+            }
+            return;   // Left/Right fall through to the focused slider
+        }
+
+        if (k.Keycode is Key.Left or Key.Right)
+        {
+            SwitchTab(k.Keycode == Key.Right ? 1 : -1);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (k.Keycode is Key.Enter or Key.KpEnter && GetViewport().GuiGetFocusOwner() is HSlider)
+        {
+            EnterEdit();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        base._Input(ev);   // back keys + Enter on buttons (which handle it themselves)
+    }
+
+    private void SwitchTab(int dir)
+    {
+        int n = _tabPanels.Count;
+        int next = ((_active + dir) % n + n) % n;
+        ShowTab(next);
+        FocusFirstIn(next);
+    }
+
+    private void FocusFirstIn(int idx)
+    {
+        foreach (Node child in _tabPanels[idx].GetChildren())
+            if (child is Control c && c.FocusMode == Control.FocusModeEnum.All && c.Visible)
+            {
+                c.CallDeferred(Control.MethodName.GrabFocus);
+                return;
+            }
+    }
+
+    private void EnterEdit()
+    {
+        _editing = true;
+        _editCtrl = GetViewport().GuiGetFocusOwner();
+        if (_editCtrl != null) _editCtrl.Modulate = UiTheme.Accent;
+        _hint.Text = EditHint;
+    }
+
+    private void ExitEdit()
+    {
+        if (_editCtrl != null) _editCtrl.Modulate = Colors.White;
+        _editCtrl = null;
+        _editing = false;
+        _hint.Text = NavHint;
+    }
 
     protected override void Build()
     {
@@ -44,7 +124,8 @@ public partial class SettingsMenu : MenuScreen
 
         v.AddChild(new HSeparator());
         v.AddChild(UiTheme.MenuItem("‹  Back", () => Ctrl.MenuBack(), 200f));
-        v.AddChild(UiTheme.Body("Esc / Space  back", UiTheme.TextDim, 14));
+        _hint = UiTheme.Body(NavHint, UiTheme.TextDim, 14);
+        v.AddChild(_hint);
 
         ShowTab(0);
     }
@@ -52,8 +133,10 @@ public partial class SettingsMenu : MenuScreen
     private void AddTab(HBoxContainer bar, VBoxContainer host, string name, Control panel)
     {
         int idx = _tabPanels.Count;
-        var b = UiTheme.MenuItem(name, () => ShowTab(idx), 150f);
+        // Tabs aren't keyboard-focusable - Left/Right switch them; the button stays mouse-clickable.
+        var b = UiTheme.MenuItem(name, () => { ShowTab(idx); FocusFirstIn(idx); }, 150f);
         b.Alignment = HorizontalAlignment.Center;
+        b.FocusMode = Control.FocusModeEnum.None;
         bar.AddChild(b);
         _tabBtns.Add(b);
         panel.CustomMinimumSize = new Vector2(480, 0);   // keep the panel width steady across tabs
@@ -63,6 +146,7 @@ public partial class SettingsMenu : MenuScreen
 
     private void ShowTab(int i)
     {
+        if (_editing) ExitEdit();
         _active = i;
         for (int k = 0; k < _tabPanels.Count; k++)
         {
