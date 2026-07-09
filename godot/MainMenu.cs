@@ -134,12 +134,10 @@ public partial class MainMenu : MenuScreen
         _confirm.AddChild(center);
 
         var card = new StyleBoxFlat { BgColor = new Color(0.10f, 0.115f, 0.14f) };
-        card.SetCornerRadiusAll(16);
-        card.CornerDetail = 8;
+        card.SetCornerRadiusAll(UiTheme.RadLg);
+        card.CornerDetail = 6;
         card.BorderColor = new Color(1, 1, 1, 0.10f);
         card.SetBorderWidthAll(1);
-        card.ShadowColor = new Color(0, 0, 0, 0.5f);
-        card.ShadowSize = 26;
 
         var panel = new PanelContainer { Theme = UiTheme.Get() };
         panel.AddThemeStyleboxOverride("panel", card);

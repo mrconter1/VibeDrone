@@ -42,6 +42,10 @@ pointing/emulate_touch_from_mouse=false
 ; runs the Forward+ renderer cleanly. Other platforms keep their default (Vulkan).
 rendering_device/driver.windows="d3d12"
 
+; Antialias 2D vector drawing (the custom-drawn menu icons, HUD, logo) - 4x MSAA on the 2D
+; canvas so polygon/line edges are smooth instead of jagged.
+anti_aliasing/quality/msaa_2d=2
+
 [physics]
 
 ; 250 Hz flight-model tick (4 ms): input sampled and transform updated every 4 ms

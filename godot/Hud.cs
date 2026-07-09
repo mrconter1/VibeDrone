@@ -22,9 +22,9 @@ public partial class Hud : Control
         SetAnchorsPreset(LayoutPreset.FullRect);
 
         // cached rounded panels (avoid per-frame allocation in _Draw)
-        _timerBox = RoundBox(new Color(0.04f, 0.05f, 0.07f, 0.58f), 14, new Color(1, 1, 1, 0.08f));
-        _pillBox  = RoundBox(new Color(0.04f, 0.05f, 0.07f, 0.55f), 13, new Color(0.24f, 0.80f, 0.96f, 0.35f));
-        _barBox   = RoundBox(new Color(0f, 0f, 0f, 0.35f), 6, null);
+        _timerBox = RoundBox(new Color(0.04f, 0.05f, 0.07f, 0.58f), 9, new Color(1, 1, 1, 0.08f));
+        _pillBox  = RoundBox(new Color(0.04f, 0.05f, 0.07f, 0.55f), 9, new Color(0.24f, 0.80f, 0.96f, 0.35f));
+        _barBox   = RoundBox(new Color(0f, 0f, 0f, 0.35f), 5, null);
     }
 
     private static StyleBoxFlat RoundBox(Color bg, int radius, Color? border)

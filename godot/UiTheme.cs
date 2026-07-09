@@ -25,8 +25,8 @@ public static class UiTheme
 
     // spacing scale (px)
     public const int S1 = 4, S2 = 8, S3 = 12, S4 = 16, S5 = 20, S6 = 24, S8 = 36;
-    // corner radii
-    public const int RadSm = 8, RadMd = 12, RadLg = 18;
+    // corner radii (kept tight - subtle rounding, not pills)
+    public const int RadSm = 5, RadMd = 7, RadLg = 9;
 
     private static Theme _theme = null!;
     private static SystemFont _title = null!, _body = null!;
@@ -42,15 +42,15 @@ public static class UiTheme
         var t = new Theme { DefaultFont = BodyFont, DefaultFontSize = 20 };
 
         // panels: frosted dark fill + hairline border + rounded corners
-        t.SetStylebox("panel", "Panel", Sb(Surface, Border, 1, 14, 0));
-        t.SetStylebox("panel", "PanelContainer", Sb(Surface, Border, 1, 14, 0));
+        t.SetStylebox("panel", "Panel", Sb(Surface, Border, 1, RadLg, 0));
+        t.SetStylebox("panel", "PanelContainer", Sb(Surface, Border, 1, RadLg, 0));
 
         // buttons: transparent by default, subtle fill on hover, accent left-bar + wash on focus
-        t.SetStylebox("normal",   "Button", Sb(new Color(1, 1, 1, 0f), null, 0, 8, 10));
-        t.SetStylebox("hover",    "Button", Sb(new Color(1, 1, 1, 0.06f), null, 0, 8, 10));
-        t.SetStylebox("pressed",  "Button", Sb(new Color(Accent, 0.20f), null, 0, 8, 10));
+        t.SetStylebox("normal",   "Button", Sb(new Color(1, 1, 1, 0f), null, 0, RadSm, 10));
+        t.SetStylebox("hover",    "Button", Sb(new Color(1, 1, 1, 0.06f), null, 0, RadSm, 10));
+        t.SetStylebox("pressed",  "Button", Sb(new Color(Accent, 0.20f), null, 0, RadSm, 10));
         t.SetStylebox("focus",    "Button", FocusBox());
-        t.SetStylebox("disabled", "Button", Sb(new Color(1, 1, 1, 0f), null, 0, 8, 10));
+        t.SetStylebox("disabled", "Button", Sb(new Color(1, 1, 1, 0f), null, 0, RadSm, 10));
         t.SetColor("font_color",         "Button", new Color(Text, 0.82f));
         t.SetColor("font_hover_color",   "Button", Text);
         t.SetColor("font_focus_color",   "Button", Accent);
@@ -121,7 +121,7 @@ public static class UiTheme
     private static StyleBoxFlat FocusBox()
     {
         var s = new StyleBoxFlat { BgColor = new Color(Accent, 0.18f) };
-        s.SetCornerRadiusAll(8);
+        s.SetCornerRadiusAll(RadSm);
         s.SetContentMarginAll(10);
         return s;
     }

@@ -11,11 +11,9 @@ public static class Ui
     {
         var sb = new StyleBoxFlat { BgColor = UiTheme.Card };
         sb.SetCornerRadiusAll(UiTheme.RadLg);
-        sb.CornerDetail = 10;
+        sb.CornerDetail = 6;
         sb.BorderColor = UiTheme.CardBorder;
         sb.SetBorderWidthAll(1);
-        sb.ShadowColor = new Color(0, 0, 0, 0.45f);
-        sb.ShadowSize = 32;
 
         panel = new PanelContainer { Theme = UiTheme.Get() };
         panel.AddThemeStyleboxOverride("panel", sb);
@@ -98,7 +96,7 @@ public static class Ui
     private static Control KeyChip(string text)
     {
         var sb = new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.06f) };
-        sb.SetCornerRadiusAll(6);
+        sb.SetCornerRadiusAll(UiTheme.RadSm);
         sb.BorderColor = new Color(1, 1, 1, 0.10f);
         sb.SetBorderWidthAll(1);
         sb.SetContentMarginAll(0);
