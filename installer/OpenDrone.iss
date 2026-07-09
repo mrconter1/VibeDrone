@@ -23,6 +23,9 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppUrl}
 AppSupportURL={#MyAppUrl}/issues
 AppUpdatesURL={#MyAppUrl}/releases
+; Per-user install (no admin/UAC): keeps the launcher and the game's per-user LocalAppData data in
+; the same scope, so updates and uninstall always target the right user. {autopf} -> LocalAppData\Programs.
+PrivilegesRequired=lowest
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -49,3 +52,18 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 
 [Run]
 Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; The launcher downloads the game into %LocalAppData%\VibeDrone; remove it on uninstall (binaries only).
+Type: filesandordirs; Name: "{localappdata}\VibeDrone"
+
+[Code]
+// After uninstalling, offer to also delete the player's save data (kept by default). The game stores
+// it via Godot's user:// which lives in %AppData%\Godot\app_userdata\OpenDrone.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    if MsgBox('Also delete your VibeDrone save data (settings, best laps and custom tracks)?',
+              mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      DelTree(ExpandConstant('{userappdata}\Godot\app_userdata\OpenDrone'), True, True, True);
+end;

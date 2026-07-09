@@ -3,12 +3,13 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace VibeDroneLauncher;
 
-public record ReleaseInfo(string Tag, string Body, string ZipUrl, string HtmlUrl);
+public record ReleaseInfo(string Tag, string Body, string ZipUrl, string HtmlUrl, string Sha256Url);
 
 // Owns the game install under %LocalAppData%\VibeDrone\app (user-writable, so updates never need
 // admin), talks to the GitHub Releases API, and downloads/extracts the game zip. All version
@@ -47,15 +48,16 @@ public class Updater
         string body = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
         string html = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
 
-        string zip = "";
+        string zip = "", sha = "";
         if (root.TryGetProperty("assets", out var assets))
             foreach (var a in assets.EnumerateArray())
             {
                 string name = a.GetProperty("name").GetString() ?? "";
-                if (name.EndsWith("windows.zip", StringComparison.OrdinalIgnoreCase))
-                    zip = a.GetProperty("browser_download_url").GetString() ?? "";
+                string url = a.GetProperty("browser_download_url").GetString() ?? "";
+                if (name.EndsWith("windows.zip", StringComparison.OrdinalIgnoreCase)) zip = url;
+                else if (name.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase)) sha = url;
             }
-        return new ReleaseInfo(tag, body, zip, html);
+        return new ReleaseInfo(tag, body, zip, html, sha);
     }
 
     // Download the game zip (reporting 0..100), then replace the app folder with its contents.
@@ -84,11 +86,34 @@ public class Updater
             }
         }
 
+        // Verify the download against the published SHA-256 before touching the installed game. A
+        // mismatch (corrupt/truncated/tampered) aborts without deleting the working install.
+        await VerifyChecksumAsync(tmp, rel.Sha256Url);
+
         if (Directory.Exists(AppDir)) Directory.Delete(AppDir, recursive: true);
         Directory.CreateDirectory(AppDir);
         ZipFile.ExtractToDirectory(tmp, AppDir);
         File.Delete(tmp);
         File.WriteAllText(VersionFile, Normalize(rel.Tag));
+    }
+
+    private async Task VerifyChecksumAsync(string file, string sha256Url)
+    {
+        if (string.IsNullOrEmpty(sha256Url)) return;   // no checksum published for this release
+
+        string text = await Http.GetStringAsync(sha256Url);
+        string expected = text.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } p
+            ? p[0].ToLowerInvariant() : "";
+
+        string actual;
+        await using (var fs = File.OpenRead(file))
+            actual = Convert.ToHexString(await SHA256.HashDataAsync(fs)).ToLowerInvariant();
+
+        if (expected.Length != 64 || actual != expected)
+        {
+            File.Delete(file);
+            throw new InvalidOperationException("Download failed verification (checksum mismatch). Please try again.");
+        }
     }
 
     public void LaunchGame()

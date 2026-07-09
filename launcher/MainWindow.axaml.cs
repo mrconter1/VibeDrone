@@ -56,6 +56,7 @@ public partial class MainWindow : Window
 
         _needsUpdate = Updater.NeedsUpdate(_latest.Tag, _installed);
         string latest = _latest.Tag.TrimStart('v', 'V');
+        string status = "";
 
         if (!_up.IsInstalled)
         {
@@ -64,8 +65,11 @@ public partial class MainWindow : Window
         }
         else if (_needsUpdate)
         {
+            // Updating is required: the only action updates before it launches - there is no
+            // "play the old version" path while the update server is reachable.
             VersionLine.Text = $"Installed  v{_installed}  ·  update  v{latest}";
             ActionBtn.Content = "Update & Play";
+            status = "A new version is required before you can play.";
         }
         else
         {
@@ -76,7 +80,7 @@ public partial class MainWindow : Window
         Notes.Text = string.IsNullOrWhiteSpace(_latest.Body)
             ? "No release notes for this version."
             : _latest.Body.Trim();
-        Status.Text = "";
+        Status.Text = status;
         ActionBtn.IsEnabled = true;
     }
 

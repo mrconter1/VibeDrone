@@ -57,6 +57,15 @@ jobs:
         shell: bash
         run: 7z a "OpenDrone-${GITHUB_REF_NAME}-windows.zip" ./build/*
 
+      - name: Checksum game zip
+        shell: pwsh
+        # SHA-256 in "<hash>  <filename>" (sha256sum) format; the launcher verifies the download against it.
+        run: |
+          $zip = Get-ChildItem "OpenDrone-*-windows.zip" | Select-Object -First 1
+          $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($zip.Name)" | Out-File "$($zip.Name).sha256" -Encoding ascii -NoNewline
+          Write-Host "sha256: $hash"
+
       - name: Publish launcher (self-contained)
         shell: bash
         run: dotnet publish launcher/VibeDroneLauncher.csproj -c Release -o launcher/publish
@@ -79,8 +88,10 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          # Installer (launcher, auto-updates the game) + portable game zip (the launcher's update feed).
+          # Installer (launcher, auto-updates the game) + portable game zip (the launcher's update feed)
+          # + its SHA-256 checksum (the launcher verifies the download against it).
           files: |
             installer_out/VibeDrone-Setup-*.exe
             OpenDrone-*-windows.zip
+            OpenDrone-*-windows.zip.sha256
           generate_release_notes: true
