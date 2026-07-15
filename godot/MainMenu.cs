@@ -93,8 +93,9 @@ public partial class MainMenu : MenuScreen
         BuildModePopup();
     }
 
-    // Build version, pinned to the bottom-right corner (baked at export by CI). Updates are handled by
-    // the external launcher, so the game only shows which build this is.
+    // Build version, pinned to the bottom-right corner (baked at export by CI). The launcher handles
+    // the actual updating; here we just show the build and, if a newer release exists, a subtle badge
+    // so players know to relaunch through the launcher.
     private void BuildVersion()
     {
         var overlay = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Theme = UiTheme.Get() };
@@ -108,6 +109,17 @@ public partial class MainMenu : MenuScreen
         label.OffsetLeft = -220; label.OffsetTop = -32;
         label.OffsetRight = -18; label.OffsetBottom = -14;
         overlay.AddChild(label);
+
+        // fire-and-forget update check; show a cyan badge above the version if a newer release is out
+        UpdateCheck.Start(this, ver, tag =>
+        {
+            var badge = UiTheme.Body(tag + " available", UiTheme.Accent, 13);
+            badge.HorizontalAlignment = HorizontalAlignment.Right;
+            badge.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+            badge.OffsetLeft = -220; badge.OffsetTop = -50;
+            badge.OffsetRight = -18; badge.OffsetBottom = -32;
+            overlay.AddChild(badge);
+        });
     }
 
     private const float RowWidth = 388f;
