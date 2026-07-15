@@ -22,7 +22,8 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     [Export] public float DroneRadius = 0.15f;   // ~5" quad half-width, for gate collision
     [Export] public float Restitution = 0.18f;   // normal rebound (low: real quads barely bounce)
     [Export] public float HitFriction = 0.55f;   // tangential speed scrubbed off on a hit (deflect, not slide)
-    [Export] public float MuzzleSpeed = 22f;      // ball launch speed (the axis-7 switch fires balls)
+    [Export] public float MuzzleSpeed = 40f;      // ball launch speed (the axis-7 switch fires balls)
+    [Export] public int MaxAmmo = 200;            // rounds per spawn; foot pedal (key 1) or axis-7 fires while held
 
     private readonly FlightModel _fm = new();
     private readonly FlightInput _input = new();   // gamepad/keyboard -> Sticks each physics tick
@@ -234,19 +235,27 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     private float _fireCooldown;
     private AudioStreamPlayer[] _firePool = null!;   // pooled "bop" voices so rapid fire overlaps
     private int _fireVoice;
+    private int _ammo = -1;                           // rounds left; -1 = not yet initialised (set from MaxAmmo)
 
-    // Fire balls out of the nose while the axis-7 switch is at its -1 detent (idle/default = no fire).
+    // Fire balls out of the nose while a trigger is held: the gamepad axis-7 switch at its -1 detent,
+    // or the foot pedal (which the OS sees as the "1" key). Auto-repeats on a cooldown while held,
+    // and stops once ammo runs out.
     private void UpdateBallLauncher(float delta)
     {
+        if (_ammo < 0) _ammo = MaxAmmo;
         _fireCooldown -= delta;
+
+        bool held = Input.IsKeyPressed(Key.Key1);
         Godot.Collections.Array<int> pads = Input.GetConnectedJoypads();
-        if (pads.Count == 0) return;
-        float sw = Input.GetJoyAxis(pads[0], (JoyAxis)7);
-        if (sw < -0.5f && _fireCooldown <= 0f)
+        if (pads.Count > 0 && Input.GetJoyAxis(pads[0], (JoyAxis)7) < -0.5f) held = true;
+
+        if (held && _ammo > 0 && _fireCooldown <= 0f)
         {
             FireBall();
-            _fireCooldown = 0.12f;
+            _ammo--;
+            _fireCooldown = 0.06f;
         }
+        _osd.Ammo = _ammo;
     }
 
     private void FireBall()

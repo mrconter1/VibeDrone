@@ -11,6 +11,7 @@ public partial class Hud : Control
 
     public float LapTime, LastLap, BestLap;
     public string RaceStatus = "", Ranks = "", LevelName = "";
+    public int Ammo = -1;   // rounds left (-1 = launcher not initialised yet; hide readout)
 
     private Font _font = null!;
     private StyleBoxFlat _timerBox = null!, _pillBox = null!, _barBox = null!;
@@ -60,6 +61,16 @@ public partial class Hud : Control
         DrawLine(c + new Vector2(0, -5), c + new Vector2(0, 5), hud, 2);
 
         if (_font == null) return;
+
+        // ammo readout, centred just below the crosshair; reds out when empty
+        if (Ammo >= 0)
+        {
+            var ammoCol = Ammo == 0 ? new Color(1f, 0.35f, 0.3f)
+                        : Ammo <= 20 ? gold
+                        : hud;
+            DrawString(_font, new Vector2(c.X - 60, c.Y + 34), $"{Ammo:000}",
+                HorizontalAlignment.Center, 120, 20, ammoCol);
+        }
 
         var accent = new Color(0.24f, 0.80f, 0.96f);
 

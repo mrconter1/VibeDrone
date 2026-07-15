@@ -7,7 +7,7 @@ public partial class Ball : RigidBody3D
 {
     public override void _Ready()
     {
-        const float r = 0.09f;
+        const float r = 0.05f;
         Mass = 0.06f;
         ContactMonitor = false;
         CollisionLayer = 0b0100;   // layer 3 (balls)
