@@ -20,9 +20,9 @@ public partial class Ball : RigidBody3D
             Mesh = new SphereMesh { Radius = r, Height = r * 2f, RadialSegments = 12, Rings = 8 },
             MaterialOverride = new StandardMaterial3D
             {
-                AlbedoColor = new Color(1f, 0.55f, 0.15f),
+                AlbedoColor = new Color(1f, 0.12f, 0.1f),
                 EmissionEnabled = true,
-                Emission = new Color(1f, 0.5f, 0.1f),
+                Emission = new Color(1f, 0.1f, 0.06f),
                 EmissionEnergyMultiplier = 1.6f,   // blooms via the world glow
                 Roughness = 0.5f,
             },

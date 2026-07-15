@@ -225,6 +225,23 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
     }
 
     // Visual-only (ghost + trail) at render rate, not the 250 Hz physics rate.
+    private bool _mutedByBlur;   // true only while we're muting because the window lost focus
+
+    // Alt-tab / focus loss: kill all sound (mute Master), restore on focus return. Only unmutes if we
+    // were the one who muted, so an intentional in-game mute survives a tab-out.
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusOut)
+        {
+            if (!AudioServer.IsBusMute(0)) { AudioServer.SetBusMute(0, true); _mutedByBlur = true; }
+        }
+        else if (what == NotificationApplicationFocusIn && _mutedByBlur)
+        {
+            AudioServer.SetBusMute(0, false);
+            _mutedByBlur = false;
+        }
+    }
+
     public override void _Process(double delta)
     {
         if (_race.Running) _recorder.UpdateVisuals(_race.LapTime, true, _drone.GlobalPosition);
@@ -273,19 +290,22 @@ public partial class DroneController : Node3D, ScreenCoordinator.IGame
         _fireVoice = (_fireVoice + 1) % _firePool.Length;
     }
 
-    // A short percussive "bop" launch sound, generated procedurally (no asset files): a sine with a
-    // fast pitch-drop and quick decay. Pooled into a few voices so back-to-back shots don't cut off.
+    // A short, dry machine-gun "crack", generated procedurally (no asset files): a snappy noise burst
+    // for the report plus a low sine thump for body, both under a fast-decaying envelope so it reads
+    // as a percussive gunshot rather than a soft blip. Pooled into several voices so back-to-back
+    // rapid fire overlaps cleanly.
     private void BuildFireSound()
     {
         const int rate = 22050;
-        int n = (int)(0.10f * rate);
+        int n = (int)(0.06f * rate);
         var data = new byte[n * 2];
         for (int i = 0; i < n; i++)
         {
             float t = (float)i / rate;
-            float env = Mathf.Exp(-t * 42f);
-            float freq = 700f * Mathf.Exp(-t * 30f) + 90f;   // pitch drops ~790 -> ~120 Hz
-            float s = Mathf.Sin(Mathf.Tau * freq * t) * env * 0.6f;
+            float env = Mathf.Exp(-t * 90f);                 // very fast decay = sharp crack
+            float noise = GD.Randf() * 2f - 1f;              // broadband report
+            float body = Mathf.Sin(Mathf.Tau * (150f * Mathf.Exp(-t * 70f) + 60f) * t);  // low thump
+            float s = (noise * 0.6f + body * 0.5f) * env * 0.85f;
             short v = (short)(Mathf.Clamp(s, -1f, 1f) * 32767f);
             data[i * 2] = (byte)(v & 0xff);
             data[i * 2 + 1] = (byte)((v >> 8) & 0xff);
