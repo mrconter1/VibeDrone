@@ -44,7 +44,7 @@ rendering_device/driver.windows="d3d12"
 
 ; Antialias 2D vector drawing (the custom-drawn menu icons, HUD, logo) - 4x MSAA on the 2D
 ; canvas so polygon/line edges are smooth instead of jagged.
-anti_aliasing/quality/msaa_2d=2
+anti_aliasing/quality/msaa_2d=0
 
 [physics]
 
